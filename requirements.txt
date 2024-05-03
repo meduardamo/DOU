@@ -1,0 +1,15 @@
+requests
+requests
+beautifulsoup4
+python-dotenv
+gspread 
+oauth2client
+babel
+certifi
+charset-normalizer
+idna
+python-http-client
+sendgrid
+soupsieve
+starbank-ecdsa
+urllib3
