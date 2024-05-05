@@ -10,5 +10,3 @@ idna>=3.2
 python-http-client>=3.3
 sendgrid>=6.5
 soupsieve>=2.2
-ecdsa>=0.16  # Suponho que você quis dizer "ecdsa" ao invés de "starbank-ecdsa", que não parece ser um pacote conhecido
-urllib3>=1.26
