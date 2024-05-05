@@ -8,22 +8,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from dotenv import load_dotenv
-
-# Conteúdo que você deseja colocar no .env
-env_content = """
-EMAIL=eixoraspagem@hotmail.com
-SENHA_EMAIL=Eixo2024@
-PLANILHA=1NAym6z6aBmJylXURA65jil1D5wC11P4ZiBKy3dmsl4M
-DESTINATARIOS=mariaeduarda.marques@eixoestrategia.com
-"""
-
-# Escrever o conteúdo no arquivo .env
-with open('.env', 'w') as file:
-    file.write(env_content.strip())
-
-# Carregar as variáveis de ambiente
-load_dotenv()
 
 # Função para Raspagem dos Dados
 def raspa_dou(data=None):
@@ -95,9 +79,8 @@ def salva_na_base(palavras_raspadas):
 
     print('Salvando palavras na base de dados...')
     try:
-        caminho_credenciais = 'raspagemdou-151e0ee88b03.json'
         scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        conta = ServiceAccountCredentials.from_json_keyfile_name(caminho_credenciais, scopes)
+        conta = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scopes)
         api = gspread.authorize(conta)
         planilha = api.open_by_key(os.getenv('PLANILHA'))
         sheet = planilha.worksheet('Página1')
