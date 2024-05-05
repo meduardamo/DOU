@@ -21,6 +21,10 @@ jobs:
     - name: Install dependencies
       run: pip install -r requirements.txt
 
+    - name: Create credentials file
+      run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > credentials.json
+      shell: bash
+
     - name: Execute script
       run: python RASPAGEMDOU.py
       env:
@@ -28,4 +32,4 @@ jobs:
         SENHA_EMAIL: ${{ secrets.SENHA_EMAIL }}
         PLANILHA: ${{ secrets.PLANILHA }}
         DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
-        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
