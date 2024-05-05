@@ -2,7 +2,7 @@ name: Raspagem e Notificação Automática
 
 on:
   schedule:
-    - cron: '0 7 * * *'  # Executa todos os dias às 07:00 UTC
+    - cron: '0 10 * * *'  # Executa todos os dias às 10:00 UTC
   workflow_dispatch:  # Permite a execução manual do workflow através da interface do GitHub
 
 jobs:
