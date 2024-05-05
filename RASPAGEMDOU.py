@@ -156,8 +156,49 @@ def envia_email(palavras_raspadas):
     finally:
         server.quit()
 
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def envia_email_teste():
+    print('Preparando para enviar e-mail de teste...')
+    smtp_server = "smtp-mail.outlook.com"
+    port = 587  # Porta para TLS
+    email = os.getenv('EMAIL')  # Seu endereço de email
+    destinatario = os.getenv('DESTINATARIOS')
+    password = os.getenv('SENHA_EMAIL')  # Sua senha de aplicativo
+
+    remetente = email
+    destinatarios = [destinatario]  # Enviar para o próprio remetente como teste
+
+    titulo = 'E-mail de Teste'
+    conteudo = "Oi"
+
+    try:
+        server = smtplib.SMTP(smtp_server, port)
+        server.starttls()  # Iniciar TLS
+        server.login(email, password)  # Autenticar usando sua senha de aplicativo
+
+        mensagem = MIMEMultipart('alternative')
+        mensagem["From"] = remetente
+        mensagem["To"] = ",".join(destinatarios)
+        mensagem["Subject"] = titulo
+        parte_texto = MIMEText(conteudo, "plain")
+        mensagem.attach(parte_texto)
+
+        server.sendmail(remetente, destinatarios, mensagem.as_string())
+        print('E-mail de teste enviado com sucesso')
+    except Exception as e:
+        print(f"Erro ao enviar e-mail de teste: {e}")
+    finally:
+        server.quit()
+
+# Lembre-se de definir as variáveis de ambiente EMAIL e SENHA_EMAIL antes de executar o código.
+
 # Chamar funções
 conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)  # Procurar termos no conteúdo raspado
 salva_na_base(palavras_raspadas)  # Salvar resultados na planilha do Google Sheets
 envia_email(palavras_raspadas)  # Enviar email com os resultados
+envia_email_teste()
