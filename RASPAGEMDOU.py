@@ -199,7 +199,7 @@ def envia_email(palavras_raspadas):
 # Lembre-se de definir as variáveis de ambiente EMAIL e SENHA_EMAIL antes de executar o código.
 
 # Chamar funções
-conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
+conteudo_raspado = raspa_dou('26-04-2024')  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)  # Procurar termos no conteúdo raspado
 salva_na_base(palavras_raspadas)  # Salvar resultados na planilha do Google Sheets
 envia_email(palavras_raspadas)  # Enviar email com os resultados
