@@ -7,7 +7,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import gspread
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Função para Raspagem dos Dados
 def raspa_dou(data=None):
@@ -16,18 +16,60 @@ def raspa_dou(data=None):
     print(f'Raspando as notícias do dia {data}...')
     try:
         url = f'http://www.in.gov.br/leiturajornal?data={data}'
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        script_tag = soup.find("script", {"id": "params"})
-        if script_tag:
+        page = requests.get(url)
+        soup = BeautifulSoup(page.text, 'html.parser')
+        if soup.find("script", {"id": "params"}):
             print('Notícias raspadas')
-            return json.loads(script_tag.text)
+            return json.loads(soup.find("script", {"id": "params"}).text)
         else:
             print("Elemento script não encontrado.")
             return None
     except requests.RequestException as e:
         print(f"Erro ao fazer a requisição: {e}")
         return None
+    except json.JSONDecodeError as e:
+        print(f"Erro ao decodificar JSON: {e}")
+        return None
+
+# Função para Formatação da Data
+def formata_data():
+    print('Encontrando a data...')
+    data_atual = date.today()
+    data_formatada = data_atual.strftime('%d-%m-%Y')
+    print('Data encontrada:', data_formatada)
+    return data_formatada
+
+# Função para Procurar Termos Específicos
+def procura_termos(conteudo_raspado):
+    if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
+        print('Nenhum conteúdo para analisar ou formato de dados inesperado.')
+        return None
+
+    print('Buscando palavras-chave...')
+    palavras_chave = ['Infância', 'Saúde', 'Educação', 'Telessaúde', 'Telessaúde Digital', 'Prontuário Eletrônico', 'Prontuário', 'Plano Nacional da Educação']
+    URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
+    resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
+    nenhum_resultado_encontrado = True
+
+    for resultado in conteudo_raspado['jsonArray']:
+        item = {
+            'section': 'Seção 1',
+            'title': resultado.get('title', 'Título não disponível'),
+            'href': URL_BASE + resultado.get('urlTitle', ''),
+            'abstract': resultado.get('content', ''),
+            'date': resultado.get('pubDate', 'Data não disponível')
+        }
+        for palavra in palavras_chave:
+            if palavra.lower() in item['abstract'].lower():
+                resultados_por_palavra[palavra].append(item)
+                nenhum_resultado_encontrado = False
+
+    if nenhum_resultado_encontrado:
+        print('Nenhum resultado encontrado para as palavras-chave especificadas.')
+        return None
+
+    print('Palavras-chave encontradas.')
+    return resultados_por_palavra
 
 # Função para Salvar os Resultados na Base de Dados
 def salva_na_base(palavras_raspadas):
@@ -37,20 +79,66 @@ def salva_na_base(palavras_raspadas):
 
     print('Salvando palavras na base de dados...')
     try:
-        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        credentials = Credentials.from_service_account_file('credentials.json', scopes=scopes)
-        client = gspread.authorize(credentials)
-        sheet = client.open_by_key(os.getenv('PLANILHA')).worksheet('Página1')
-        rows_to_append = [[item['date'], palavra, item['title'], item['href'], item['abstract']]
-                          for palavra, lista_resultados in palavras_raspadas.items() for item in lista_resultados]
+        scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        conta = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scopes)
+        api = gspread.authorize(conta)
+        print("Autenticação concluída.")
+
+        planilha = api.open_by_key(os.getenv('PLANILHA'))
+        print("Planilha acessada.")
+
+        sheet = planilha.worksheet('Página1')
+        print("Aba acessada.")
+
+        rows_to_append = []
+        for palavra, lista_resultados in palavras_raspadas.items():
+            for item in lista_resultados:
+                row = [item['date'], palavra, item['title'], item['href'], item['abstract']]
+                rows_to_append.append(row)
 
         if rows_to_append:
             sheet.append_rows(rows_to_append)
             print(f'{len(rows_to_append)} linhas foram adicionadas à planilha.')
         else:
             print('Nenhum dado válido para salvar.')
+
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
+
+def envia_email_teste():
+    print('Preparando para enviar e-mail de teste...')
+    smtp_server = "smtp-mail.outlook.com"
+    port = 587  # Porta para TLS
+    email = os.getenv('EMAIL')  # Seu endereço de email
+    destinatario = os.getenv('DESTINATARIOS')
+    password = os.getenv('SENHA_EMAIL')  # Sua senha de aplicativo
+
+    remetente = email
+    destinatarios = [destinatario]  # Enviar para o próprio remetente como teste
+
+    titulo = 'E-mail de Teste'
+    conteudo = "Oi"
+
+    try:
+        server = smtplib.SMTP(smtp_server, port)
+        server.starttls()  # Iniciar TLS
+        server.login(email, password)  # Autenticar usando sua senha de aplicativo
+
+        mensagem = MIMEMultipart('alternative')
+        mensagem["From"] = remetente
+        mensagem["To"] = ",".join(destinatarios)
+        mensagem["Subject"] = titulo
+        parte_texto = MIMEText(conteudo, "plain")
+        mensagem.attach(parte_texto)
+
+        server.sendmail(remetente, destinatarios, mensagem.as_string())
+        print('E-mail de teste enviado com sucesso')
+    except Exception as e:
+        print(f"Erro ao enviar e-mail de teste: {e}")
+    finally:
+        server.quit()
+        
+envia_email_teste()
 
 # Função para Enviar Email com os Resultados
 def envia_email(palavras_raspadas):
@@ -60,50 +148,58 @@ def envia_email(palavras_raspadas):
 
     print('Enviando e-mail...')
     smtp_server = "smtp-mail.outlook.com"
-    port = 587
+    port = 587  # Porta para TLS
     email = os.getenv('EMAIL')
     password = os.getenv('SENHA_EMAIL')
+    remetente = email
     destinatarios = os.getenv('DESTINATARIOS').split(',')
     data = datetime.now().strftime('%d-%m-%Y')
     titulo = f'Busca DOU do dia {data}'
-
     html = f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>Busca DOU</title>
-</head>
-<body>
-    <h1>Consulta ao Diário Oficial da União</h1>
-    <p>As matérias encontradas no dia {data} foram:</p>
-    {format_html_results(palavras_raspadas)}
-</body>
-</html>"""
+    <html>
+        <head>
+            <title>Busca DOU</title>
+        </head>
+        <body>
+            <h1>Consulta ao Diário Oficial da União</h1>
+            <p>As matérias encontradas no dia {data} foram:</p>
+    """
+
+    for palavra, lista_resultados in palavras_raspadas.items():
+        html += f"<h2>{palavra}</h2>\n"
+        if lista_resultados:
+            html += "<ul>\n"
+            for resultado in lista_resultados:
+                html += f"<li><a href='{resultado['href']}'>{resultado['title']}</a></li>\n"
+            html += "</ul>\n"
+        else:
+            html += "<p>Nenhum resultado encontrado para esta palavra-chave.</p>\n"
+
+    html += "</body>\n</html>"
 
     try:
-        with smtplib.SMTP(smtp_server, port) as server:
-            server.starttls()
-            server.login(email, password)
-            msg = MIMEMultipart('alternative')
-            msg["From"] = email
-            msg["To"] = ",".join(destinatarios)
-            msg["Subject"] = titulo
-            msg.attach(MIMEText(html, "html"))
-            server.sendmail(email, destinatarios, msg.as_string())
-            print('E-mail enviado com sucesso.')
+        server = smtplib.SMTP(smtp_server, port)
+        server.starttls()  # Iniciar TLS
+        server.login(email, password)  # Autenticar usando sua senha de aplicativo
+
+        mensagem = MIMEMultipart('alternative')
+        mensagem["From"] = remetente
+        mensagem["To"] = ",".join(destinatarios)
+        mensagem["Subject"] = titulo
+        conteudo_html = MIMEText(html, "html")
+        mensagem.attach(conteudo_html)
+
+        server.sendmail(remetente, destinatarios, mensagem.as_string())
+        print('E-mail enviado com sucesso.')
     except Exception as e:
         print(f"Erro ao enviar e-mail: {e}")
+    finally:
+        server.quit()
 
-def format_html_results(palavras_raspadas):
-    html_content = ""
-    for palavra, lista_resultados in palavras_raspadas.items():
-        html_content += f"<h2>{palavra}</h2>\n<ul>\n"
-        for resultado in lista_resultados:
-            html_content += f"<li><a href='{resultado['href']}'>{resultado['title']}</a></li>\n"
-        html_content += "</ul>\n"
-    return html_content
+# Lembre-se de definir as variáveis de ambiente EMAIL e SENHA_EMAIL antes de executar o código.
 
 # Chamar funções
-conteudo_raspado = raspa_dou()
-palavras_raspadas = procura_termos(conteudo_raspado)
-salva_na_base(palavras_raspadas)
+conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
+palavras_raspadas = procura_termos(conteudo_raspado)  # Procurar termos no conteúdo raspado
+salva_na_base(palavras_raspadas)  # Salvar resultados na planilha do Google Sheets
 envia_email(palavras_raspadas)
