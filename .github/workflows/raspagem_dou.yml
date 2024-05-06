@@ -10,26 +10,26 @@ jobs:
     runs-on: ubuntu-latest  # Define o sistema operacional do runner
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3  # Ação para verificar o código do seu repositório
+      - name: Checkout code
+        uses: actions/checkout@v3  # Ação para verificar o código do seu repositório
 
-    - name: Set up Python
-      uses: actions/setup-python@v4  # Ação para configurar o ambiente Python
-      with:
-        python-version: '3.x'  # Especifique a versão do Python
+      - name: Set up Python
+        uses: actions/setup-python@v4  # Ação para configurar o ambiente Python
+        with:
+          python-version: '3.x'  # Especifique a versão do Python
 
-    - name: Install dependencies
-      run: python -m pip install -r requirements.txt  # Instala as dependências do arquivo requirements.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt  # Instala as dependências do arquivo requirements.txt
 
-    - name: Create credentials file
-      run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > credentials.json
-      shell: bash  # Cria um arquivo de credenciais para autenticação com o Google
+      - name: Create credentials file
+        run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > credentials.json
+        shell: bash  # Cria um arquivo de credenciais para autenticação com o Google
 
-    - name: Execute script
-      run: python RASPAGEMDOU.py  # Executa o script Python
-      env:  # Configura as variáveis de ambiente necessárias para o script
-        EMAIL: ${{ secrets.EMAIL }}
-        SENHA_EMAIL: ${{ secrets.SENHA_EMAIL }}
-        PLANILHA: ${{ secrets.PLANILHA }}
-        DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
+      - name: Execute script
+        run: python RASPAGEMDOU.py  # Executa o script Python
+        env:  # Configura as variáveis de ambiente necessárias para o script
+          EMAIL: ${{ secrets.EMAIL }}
+          SENHA_EMAIL: ${{ secrets.SENHA_EMAIL }}
+          PLANILHA: ${{ secrets.PLANILHA }}
+          DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
