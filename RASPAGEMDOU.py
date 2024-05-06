@@ -100,8 +100,6 @@ def salva_na_base(palavras_raspadas):
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
 
-import os
-import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
