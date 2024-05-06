@@ -12,7 +12,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # Função para Raspagem dos Dados
 def raspa_dou(data=None):
     if data is None:
-        data = datetime.now().strftime('%Y-%m-%d')
+        data = datetime.now().strftime('%d-%m-%Y')
     print(f'Raspando as notícias do dia {data}...')
     try:
         url = f'http://www.in.gov.br/leiturajornal?data={data}'
@@ -35,7 +35,7 @@ def raspa_dou(data=None):
 def formata_data():
     print('Encontrando a data...')
     data_atual = date.today()
-    data_formatada = data_atual.strftime("%d/%m/%Y")
+    data_formatada = data_atual.strftime('%d-%m-%Y')
     print('Data encontrada:', data_formatada)
     return data_formatada
 
@@ -153,7 +153,7 @@ def envia_email(palavras_raspadas):
     password = os.getenv('SENHA_EMAIL')
     remetente = email
     destinatarios = os.getenv('DESTINATARIOS').split(',')
-    data = datetime.now().strftime('%d/%m/%Y')
+    data = datetime.now().strftime('%d-%m-%Y')
     titulo = f'Busca DOU do dia {data}'
     html = f"""<!DOCTYPE html>
     <html>
@@ -199,6 +199,6 @@ def envia_email(palavras_raspadas):
 # Lembre-se de definir as variáveis de ambiente EMAIL e SENHA_EMAIL antes de executar o código.
 
 # Chamar funções
-conteudo_raspado = raspa_dou('06-05-2024')  # Obter conteúdo raspado para data específica
+conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)  # Procurar termos no conteúdo raspado
 salva_na_base(palavras_raspadas)  # Salvar resultados na planilha do Google Sheets
