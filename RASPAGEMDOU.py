@@ -202,3 +202,4 @@ def envia_email(palavras_raspadas):
 conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)  # Procurar termos no conteúdo raspado
 salva_na_base(palavras_raspadas)  # Salvar resultados na planilha do Google Sheets
+envia_email(palavras_raspadas)
