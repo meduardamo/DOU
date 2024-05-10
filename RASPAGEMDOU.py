@@ -20,7 +20,7 @@ def raspa_dou(data=None):
         soup = BeautifulSoup(page.text, 'html.parser')
         if soup.find("script", {"id": "params"}):
             print('Notícias raspadas')
-            return json.load(soup.find("script", {"id": "params"}).text)
+            return json.loads(soup.find("script", {"id": "params"}).text)
         else:
             print("Elemento script não encontrado.")
             return None
