@@ -7,14 +7,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import gspread
-from google.oauth2.service_account import Credentials
-
-# Função para autorizar o Google Sheets
-def authorize_google_sheets():
-    scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    credentials = Credentials.from_service_account_file('credentials.json', scopes=scopes)
-    gc = gspread.authorize(credentials)
-    return gc
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Função para Raspagem dos Dados
 def raspa_dou(data=None):
@@ -37,6 +30,14 @@ def raspa_dou(data=None):
     except json.JSONDecodeError as e:
         print(f"Erro ao decodificar JSON: {e}")
         return None
+
+# Função para Formatação da Data
+def formata_data():
+    print('Encontrando a data...')
+    data_atual = date.today()
+    data_formatada = data_atual.strftime('%d-%m-%Y')
+    print('Data encontrada:', data_formatada)
+    return data_formatada
 
 # Função para Procurar Termos Específicos
 def procura_termos(conteudo_raspado):
@@ -78,9 +79,16 @@ def salva_na_base(palavras_raspadas):
 
     print('Salvando palavras na base de dados...')
     try:
-        gc = authorize_google_sheets()
-        planilha = gc.open_by_key(os.getenv('PLANILHA'))
+        scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        conta = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scopes)
+        api = gspread.authorize(conta)
+        print("Autenticação concluída.")
+
+        planilha = api.open_by_key(os.getenv('PLANILHA'))
+        print("Planilha acessada.")
+
         sheet = planilha.worksheet('Página1')
+        print("Aba acessada.")
 
         rows_to_append = []
         for palavra, lista_resultados in palavras_raspadas.items():
@@ -89,12 +97,48 @@ def salva_na_base(palavras_raspadas):
                 rows_to_append.append(row)
 
         if rows_to_append:
-            sheet.append_rows(rows_to_append, value_input_option='USER_ENTERED')
+            sheet.append_rows(rows_to_append)
             print(f'{len(rows_to_append)} linhas foram adicionadas à planilha.')
         else:
             print('Nenhum dado válido para salvar.')
+
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
+
+def envia_email_teste():
+    print('Preparando para enviar e-mail de teste...')
+    smtp_server = "smtp-mail.outlook.com"
+    port = 587  # Porta para TLS
+    email = os.getenv('EMAIL')  # Seu endereço de email
+    destinatario = os.getenv('DESTINATARIOS')
+    password = os.getenv('SENHA_EMAIL')  # Sua senha de aplicativo
+
+    remetente = email
+    destinatarios = [destinatario]  # Enviar para o próprio remetente como teste
+
+    titulo = 'E-mail de Teste'
+    conteudo = "Oi"
+
+    try:
+        server = smtplib.SMTP(smtp_server, port)
+        server.starttls()  # Iniciar TLS
+        server.login(email, password)  # Autenticar usando sua senha de aplicativo
+
+        mensagem = MIMEMultipart('alternative')
+        mensagem["From"] = remetente
+        mensagem["To"] = ",".join(destinatarios)
+        mensagem["Subject"] = titulo
+        parte_texto = MIMEText(conteudo, "plain")
+        mensagem.attach(parte_texto)
+
+        server.sendmail(remetente, destinatarios, mensagem.as_string())
+        print('E-mail de teste enviado com sucesso')
+    except Exception as e:
+        print(f"Erro ao enviar e-mail de teste: {e}")
+    finally:
+        server.quit()
+        
+envia_email_teste()
 
 # Função para Enviar Email com os Resultados
 def envia_email(palavras_raspadas):
@@ -107,6 +151,7 @@ def envia_email(palavras_raspadas):
     port = 587  # Porta para TLS
     email = os.getenv('EMAIL')
     password = os.getenv('SENHA_EMAIL')
+    remetente = email
     destinatarios = os.getenv('DESTINATARIOS').split(',')
     data = datetime.now().strftime('%d-%m-%Y')
     titulo = f'Busca DOU do dia {data}'
@@ -134,23 +179,27 @@ def envia_email(palavras_raspadas):
 
     try:
         server = smtplib.SMTP(smtp_server, port)
-        server.starttls()
-        server.login(email, password)
+        server.starttls()  # Iniciar TLS
+        server.login(email, password)  # Autenticar usando sua senha de aplicativo
+
         mensagem = MIMEMultipart('alternative')
-        mensagem["From"] = email
+        mensagem["From"] = remetente
         mensagem["To"] = ",".join(destinatarios)
         mensagem["Subject"] = titulo
         conteudo_html = MIMEText(html, "html")
         mensagem.attach(conteudo_html)
-        server.sendmail(email, destinatarios, mensagem.as_string())
+
+        server.sendmail(remetente, destinatarios, mensagem.as_string())
         print('E-mail enviado com sucesso.')
     except Exception as e:
         print(f"Erro ao enviar e-mail: {e}")
     finally:
         server.quit()
 
+# Lembre-se de definir as variáveis de ambiente EMAIL e SENHA_EMAIL antes de executar o código.
+
 # Chamar funções
 conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)  # Procurar termos no conteúdo raspado
 salva_na_base(palavras_raspadas)  # Salvar resultados na planilha do Google Sheets
-envia_email(palavras_raspadas)  # Enviar e-mail com os resultados
+envia_email(palavras_raspadas)
