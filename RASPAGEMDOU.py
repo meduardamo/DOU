@@ -114,41 +114,6 @@ def salva_na_base(palavras_raspadas):
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
 
-def envia_email_teste():
-    print('Preparando para enviar e-mail de teste...')
-    smtp_server = "smtp-mail.outlook.com"
-    port = 587  # Porta para TLS
-    email = os.getenv('EMAIL')  # Seu endereço de email
-    destinatario = os.getenv('DESTINATARIOS')
-    password = os.getenv('SENHA_EMAIL')  # Sua senha de aplicativo
-
-    remetente = email
-    destinatarios = [destinatario]  # Enviar para o próprio remetente como teste
-
-    titulo = 'E-mail de Teste'
-    conteudo = "Oi"
-
-    try:
-        server = smtplib.SMTP(smtp_server, port)
-        server.starttls()  # Iniciar TLS
-        server.login(email, password)  # Autenticar usando sua senha de aplicativo
-
-        mensagem = MIMEMultipart('alternative')
-        mensagem["From"] = remetente
-        mensagem["To"] = ",".join(destinatarios)
-        mensagem["Subject"] = titulo
-        parte_texto = MIMEText(conteudo, "plain")
-        mensagem.attach(parte_texto)
-
-        server.sendmail(remetente, destinatarios, mensagem.as_string())
-        print('E-mail de teste enviado com sucesso')
-    except Exception as e:
-        print(f"Erro ao enviar e-mail de teste: {e}")
-    finally:
-        server.quit()
-        
-#envia_email_teste()
-
 # Função para Enviar Email com os Resultados
 def envia_email(palavras_raspadas):
     if not palavras_raspadas:
