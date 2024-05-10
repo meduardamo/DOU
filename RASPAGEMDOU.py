@@ -170,8 +170,6 @@ def envia_email(palavras_raspadas):
     finally:
         server.quit()
 
-# Lembre-se de definir as variáveis de ambiente EMAIL e SENHA_EMAIL antes de executar o código.
-
 # Chamar funções
 conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)  # Procurar termos no conteúdo raspado
