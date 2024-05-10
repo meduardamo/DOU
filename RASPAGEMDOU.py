@@ -46,7 +46,21 @@ def procura_termos(conteudo_raspado):
         return None
 
     print('Buscando palavras-chave...')
-    palavras_chave = ['Infância', 'Saúde', 'Educação', 'Telessaúde', 'Telessaúde Digital', 'Prontuário Eletrônico', 'Prontuário', 'Plano Nacional da Educação']
+    palavras_chave = [
+    'Infância', 
+    'Saúde', 
+    'Educação', 
+    'Alfabetização', 
+    'Programa Saúde na Escola', 
+    'Atenção Psicosocial', 
+    'Primeira Infância', 
+    'Saúde Mental',
+    'Telessaúde', 
+    'Telessaúde Digital', 
+    'Prontuário Eletrônico', 
+    'Prontuário', 
+    'Plano Nacional da Educação'
+]
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
     nenhum_resultado_encontrado = True
