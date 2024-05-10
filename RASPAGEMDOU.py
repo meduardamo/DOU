@@ -147,7 +147,7 @@ def envia_email_teste():
     finally:
         server.quit()
         
-envia_email_teste()
+#envia_email_teste()
 
 # Função para Enviar Email com os Resultados
 def envia_email(palavras_raspadas):
