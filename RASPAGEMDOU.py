@@ -82,15 +82,10 @@ def salva_na_base(palavras_raspadas):
         scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         conta = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scopes)
         api = gspread.authorize(conta)
-        print("Autenticação concluída.")
-
         planilha = api.open_by_key(os.getenv('PLANILHA'))
-        print("Planilha acessada.")
-
         sheet = planilha.worksheet('Página1')
-        print("Aba acessada.")
-
         rows_to_append = []
+
         for palavra, lista_resultados in palavras_raspadas.items():
             for item in lista_resultados:
                 row = [item['date'], palavra, item['title'], item['href'], item['abstract']]
@@ -104,6 +99,9 @@ def salva_na_base(palavras_raspadas):
 
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
+
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 def envia_email_teste():
     print('Preparando para enviar e-mail de teste...')
