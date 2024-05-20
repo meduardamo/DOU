@@ -140,14 +140,12 @@ def envia_email(palavras_raspadas):
     """
 
     for palavra, lista_resultados in palavras_raspadas.items():
-        html += f"<h2>{palavra}</h2>\n"
-        if lista_resultados:
+        if lista_resultados:  # Inclui apenas se a lista de resultados não estiver vazia
+            html += f"<h2>{palavra}</h2>\n"
             html += "<ul>\n"
             for resultado in lista_resultados:
                 html += f"<li><a href='{resultado['href']}'>{resultado['title']}</a></li>\n"
             html += "</ul>\n"
-        else:
-            html += "<p>Nenhum resultado encontrado para esta palavra-chave.</p>\n"
 
     html += "</body>\n</html>"
 
