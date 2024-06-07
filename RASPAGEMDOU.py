@@ -7,6 +7,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import gspread
+import re
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Função para Raspagem dos Dados
@@ -47,15 +48,15 @@ def procura_termos(conteudo_raspado):
 
     print('Buscando palavras-chave...')
     palavras_chave = [
-    'Infância', 'Criança', 'Infantil', 'Infâncias', 'Crianças', 
-    'Educação', 'Ensino', 'Escolaridade',
-    'Plano Nacional da Educação', 'PNE', 'Educacional',
-    'Alfabetização', 'Letramento',
-    'Saúde', 'Telessaúde', 'Telemedicina',
-    'Digital', 'Digitais', 'Prontuário',
-    'Programa Saúde na Escola', 'PSE', 
-    'Psicosocial', 'Mental',
-]
+        'Infância', 'Criança', 'Infantil', 'Infâncias', 'Crianças', 
+        'Educação', 'Ensino', 'Escolaridade',
+        'Plano Nacional da Educação', 'PNE', 'Educacional',
+        'Alfabetização', 'Letramento',
+        'Saúde', 'Telessaúde', 'Telemedicina',
+        'Digital', 'Digitais', 'Prontuário',
+        'Programa Saúde na Escola', 'PSE', 
+        'Psicosocial', 'Mental',
+    ]
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
     nenhum_resultado_encontrado = True
@@ -68,8 +69,10 @@ def procura_termos(conteudo_raspado):
             'abstract': resultado.get('content', ''),
             'date': resultado.get('pubDate', 'Data não disponível')
         }
+        texto = item['abstract'].lower()
         for palavra in palavras_chave:
-            if palavra.lower() in item['abstract'].lower():
+            # Busca pela palavra como uma palavra completa, não como substring
+            if re.search(r'\b' + re.escape(palavra.lower()) + r'\b', texto):
                 resultados_por_palavra[palavra].append(item)
                 nenhum_resultado_encontrado = False
 
