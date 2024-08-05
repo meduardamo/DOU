@@ -66,6 +66,7 @@ def procura_termos(conteudo_raspado):
     'Exposição a Fatores de Risco', 'Departamento de Saúde Mental', 
     'Hipertensão Arterial'
     ]
+    
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
     nenhum_resultado_encontrado = True
