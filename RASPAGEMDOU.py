@@ -48,14 +48,23 @@ def procura_termos(conteudo_raspado):
 
     print('Buscando palavras-chave...')
     palavras_chave = [
-        'Infância', 'Criança', 'Infantil', 'Infâncias', 'Crianças', 
-        'Educação', 'Ensino', 'Escolaridade',
-        'Plano Nacional da Educação', 'PNE', 'Educacional',
-        'Alfabetização', 'Letramento',
-        'Saúde', 'Telessaúde', 'Telemedicina',
-        'Digital', 'Digitais', 'Prontuário',
-        'Programa Saúde na Escola', 'PSE', 
-        'Psicosocial', 'Mental',
+    'Infância', 'Criança', 'Infantil', 'Infâncias', 'Crianças', 
+    'Educação', 'Ensino', 'Escolaridade',
+    'Plano Nacional da Educação', 'PNE', 'Educacional',
+    'Alfabetização', 'Letramento',
+    'Saúde', 'Telessaúde', 'Telemedicina',
+    'Digital', 'Digitais', 'Prontuário',
+    'Programa Saúde na Escola', 'PSE', 
+    'Psicosocial', 'Mental',
+    'Saúde Mental', 'Dados para a Saúde', 'Morte Evitável', 
+    'Doenças Crônicas Não Transmissíveis', 'Rotulagem de Bebidas Alcoólicas', 
+    'Educação em Saúde', 'Bebidas Alcoólicas', 'Imposto Seletivo', 
+    'Rotulagem de Alimentos', 'Alimentos Ultraprocessados', 
+    'Publicidade Infantil', 'Publicidade de Alimentos Ultraprocessados', 
+    'Tributação de Bebidas Alcoólicas', 'Alíquota de Bebidas Alcoólicas', 
+    'Cigarro Eletrônico', 'Controle de Tabaco', 'Violência Doméstica', 
+    'Exposição a Fatores de Risco', 'Departamento de Saúde Mental', 
+    'Hipertensão Arterial'
     ]
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
