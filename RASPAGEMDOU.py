@@ -3,12 +3,11 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, date
 import json
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import gspread
 import re
 from oauth2client.service_account import ServiceAccountCredentials
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 # Função para Raspagem dos Dados
 def raspa_dou(data=None):
@@ -122,21 +121,18 @@ def salva_na_base(palavras_raspadas):
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
 
-# Função para Enviar Email com os Resultados
-def envia_email(palavras_raspadas):
+# Função para Enviar Email com SendGrid
+def envia_email_sendgrid(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para enviar.')
         return
 
-    print('Enviando e-mail...')
-    smtp_server = "smtp-mail.outlook.com"
-    port = 587  # Porta para TLS
+    print('Enviando e-mail via SendGrid...')
     email = os.getenv('EMAIL')
-    password = os.getenv('SENHA_EMAIL')
-    remetente = email
     destinatarios = os.getenv('DESTINATARIOS').split(',')
     data = datetime.now().strftime('%d-%m-%Y')
     titulo = f'Busca DOU do dia {data}'
+
     html = f"""<!DOCTYPE html>
     <html>
         <head>
@@ -148,36 +144,30 @@ def envia_email(palavras_raspadas):
     """
 
     for palavra, lista_resultados in palavras_raspadas.items():
-        if lista_resultados:  # Inclui apenas se a lista de resultados não estiver vazia
-            html += f"<h2>{palavra}</h2>\n"
-            html += "<ul>\n"
+        if lista_resultados:
+            html += f"<h2>{palavra}</h2>\n<ul>\n"
             for resultado in lista_resultados:
                 html += f"<li><a href='{resultado['href']}'>{resultado['title']}</a></li>\n"
             html += "</ul>\n"
 
     html += "</body>\n</html>"
 
+    message = Mail(
+        from_email=email,
+        to_emails=destinatarios,
+        subject=titulo,
+        html_content=html
+    )
+
     try:
-        server = smtplib.SMTP(smtp_server, port)
-        server.starttls()  # Iniciar TLS
-        server.login(email, password)  # Autenticar usando sua senha de aplicativo
-
-        mensagem = MIMEMultipart('alternative')
-        mensagem["From"] = remetente
-        mensagem["To"] = ",".join(destinatarios)
-        mensagem["Subject"] = titulo
-        conteudo_html = MIMEText(html, "html")
-        mensagem.attach(conteudo_html)
-
-        server.sendmail(remetente, destinatarios, mensagem.as_string())
-        print('E-mail enviado com sucesso.')
+        sg = SendGridAPIClient(os.getenv('SENDGRID_API_KEY'))
+        response = sg.send(message)
+        print(f'E-mail enviado com sucesso. Status Code: {response.status_code}')
     except Exception as e:
         print(f"Erro ao enviar e-mail: {e}")
-    finally:
-        server.quit()
 
 # Chamar funções
 conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)
 salva_na_base(palavras_raspadas) 
-envia_email(palavras_raspadas)
+envia_email_sendgrid(palavras_raspadas)
