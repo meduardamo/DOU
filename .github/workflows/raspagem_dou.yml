@@ -33,3 +33,4 @@ jobs:
         PLANILHA: ${{ secrets.PLANILHA }}
         DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
         GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
+        SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
