@@ -128,29 +128,37 @@ def envia_email_sendgrid(palavras_raspadas):
         return
 
     print('Enviando e-mail via SendGrid...')
-    email = os.getenv('EMAIL')
+    email         = os.getenv('EMAIL')
     destinatarios = os.getenv('DESTINATARIOS').split(',')
-    data = datetime.now().strftime('%d-%m-%Y')
-    titulo = f'Busca DOU do dia {data}'
+    data          = datetime.now().strftime('%d-%m-%Y')
+    titulo        = f'Busca DOU do dia {data}'
+
+    # monta o link da planilha dinamicamente
+    planilha_id  = os.getenv('PLANILHA')
+    planilha_url = f'https://docs.google.com/spreadsheets/d/{planilha_id}/edit?gid=0'
 
     html = f"""<!DOCTYPE html>
     <html>
-        <head>
-            <title>Busca DOU</title>
-        </head>
-        <body>
-            <h1>Consulta ao Diário Oficial da União</h1>
-            <p>As matérias encontradas no dia {data} foram:</p>
+      <head><title>Busca DOU</title></head>
+      <body>
+        <h1>Consulta ao Diário Oficial da União</h1>
+        <p>
+          As matérias encontradas no dia {data} estão listadas a seguir
+          e já foram armazenadas na
+          <a href="{planilha_url}" target="_blank">📋 planilha</a>.
+        </p>
     """
 
     for palavra, lista_resultados in palavras_raspadas.items():
         if lista_resultados:
             html += f"<h2>{palavra}</h2>\n<ul>\n"
             for resultado in lista_resultados:
-                html += f"<li><a href='{resultado['href']}'>{resultado['title']}</a></li>\n"
+                html += f"  <li><a href='{resultado['href']}'>{resultado['title']}</a></li>\n"
             html += "</ul>\n"
 
-    html += "</body>\n</html>"
+    html += """  </body>
+    </html>
+    """
 
     message = Mail(
         from_email=email,
@@ -160,7 +168,7 @@ def envia_email_sendgrid(palavras_raspadas):
     )
 
     try:
-        sg = SendGridAPIClient(os.getenv('SENDGRID_API_KEY'))
+        sg       = SendGridAPIClient(os.getenv('SENDGRID_API_KEY'))
         response = sg.send(message)
         print(f'E-mail enviado com sucesso. Status Code: {response.status_code}')
     except Exception as e:
