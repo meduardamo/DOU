@@ -145,7 +145,7 @@ def envia_email_sendgrid(palavras_raspadas):
         <p>
           As matérias encontradas no dia {data} estão listadas a seguir
           e já foram armazenadas na
-          <a href="{planilha_url}" target="_blank">📋 planilha</a>.
+          <a href="{planilha_url}" target="_blank">planilha</a>.
         </p>
     """
 
