@@ -63,7 +63,7 @@ def procura_termos(conteudo_raspado):
     'Tributação de Bebidas Alcoólicas', 'Alíquota de Bebidas Alcoólicas', 
     'Cigarro Eletrônico', 'Controle de Tabaco', 'Violência Doméstica', 
     'Exposição a Fatores de Risco', 'Departamento de Saúde Mental', 
-    'Hipertensão Arterial', 'Alimentação Escolar', 'PNAE'
+    'Hipertensão Arterial', 'Alimentação Escolar', 'PNAE', "Agora Tem Especialistas"
     ]
     
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
