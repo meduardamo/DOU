@@ -10,7 +10,9 @@ from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 
+# ================================
 # Função para Raspagem dos Dados
+# ================================
 def raspa_dou(data=None):
     if data is None:
         data = datetime.now().strftime('%d-%m-%Y')
@@ -32,7 +34,9 @@ def raspa_dou(data=None):
         print(f"Erro ao decodificar JSON: {e}")
         return None
 
+# ================================
 # Função para Formatação da Data
+# ================================
 def formata_data():
     print('Encontrando a data...')
     data_atual = date.today()
@@ -40,7 +44,9 @@ def formata_data():
     print('Data encontrada:', data_formatada)
     return data_formatada
 
-# Função para Procurar Termos Específicos
+# ================================
+# Função para Procurar Termos
+# ================================
 def procura_termos(conteudo_raspado):
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar ou formato de dados inesperado.')
@@ -48,25 +54,25 @@ def procura_termos(conteudo_raspado):
 
     print('Buscando palavras-chave...')
     palavras_chave = [
-    'Infância', 'Criança', 'Infantil', 'Infâncias', 'Crianças', 
-    'Educação', 'Ensino', 'Escolaridade',
-    'Plano Nacional da Educação', 'PNE', 'Educacional',
-    'Alfabetização', 'Letramento',
-    'Saúde', 'Telessaúde', 'Telemedicina',
-    'Digital', 'Digitais', 'Prontuário',
-    'Programa Saúde na Escola', 'PSE', 
-    'Psicosocial', 'Mental',
-    'Saúde Mental', 'Dados para a Saúde', 'Morte Evitável', 
-    'Doenças Crônicas Não Transmissíveis', 'Rotulagem de Bebidas Alcoólicas', 
-    'Educação em Saúde', 'Bebidas Alcoólicas', 'Imposto Seletivo', 
-    'Rotulagem de Alimentos', 'Alimentos Ultraprocessados', 
-    'Publicidade Infantil', 'Publicidade de Alimentos Ultraprocessados', 
-    'Tributação de Bebidas Alcoólicas', 'Alíquota de Bebidas Alcoólicas', 
-    'Cigarro Eletrônico', 'Controle de Tabaco', 'Violência Doméstica', 
-    'Exposição a Fatores de Risco', 'Departamento de Saúde Mental', 
-    'Hipertensão Arterial', 'Alimentação Escolar', 'PNAE', "Agora Tem Especialistas"
+        'Infância', 'Criança', 'Infantil', 'Infâncias', 'Crianças',
+        'Educação', 'Ensino', 'Escolaridade',
+        'Plano Nacional da Educação', 'PNE', 'Educacional',
+        'Alfabetização', 'Letramento',
+        'Saúde', 'Telessaúde', 'Telemedicina',
+        'Digital', 'Digitais', 'Prontuário',
+        'Programa Saúde na Escola', 'PSE',
+        'Psicosocial', 'Mental',
+        'Saúde Mental', 'Dados para a Saúde', 'Morte Evitável',
+        'Doenças Crônicas Não Transmissíveis', 'Rotulagem de Bebidas Alcoólicas',
+        'Educação em Saúde', 'Bebidas Alcoólicas', 'Imposto Seletivo',
+        'Rotulagem de Alimentos', 'Alimentos Ultraprocessados',
+        'Publicidade Infantil', 'Publicidade de Alimentos Ultraprocessados',
+        'Tributação de Bebidas Alcoólicas', 'Alíquota de Bebidas Alcoólicas',
+        'Cigarro Eletrônico', 'Controle de Tabaco', 'Violência Doméstica',
+        'Exposição a Fatores de Risco', 'Departamento de Saúde Mental',
+        'Hipertensão Arterial', 'Alimentação Escolar', 'PNAE', "Agora Tem Especialistas"
     ]
-    
+
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
     nenhum_resultado_encontrado = True
@@ -81,7 +87,6 @@ def procura_termos(conteudo_raspado):
         }
         texto = item['abstract'].lower()
         for palavra in palavras_chave:
-            # Busca pela palavra como uma palavra completa, não como substring
             if re.search(r'\b' + re.escape(palavra.lower()) + r'\b', texto):
                 resultados_por_palavra[palavra].append(item)
                 nenhum_resultado_encontrado = False
@@ -93,7 +98,9 @@ def procura_termos(conteudo_raspado):
     print('Palavras-chave encontradas.')
     return resultados_por_palavra
 
-# Função para Salvar os Resultados na Base de Dados
+# ================================
+# Função para Salvar os Resultados
+# ================================
 def salva_na_base(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para salvar.')
@@ -122,7 +129,9 @@ def salva_na_base(palavras_raspadas):
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
 
-# Função para Enviar Email
+# ================================
+# Função para Enviar Email via Brevo
+# ================================
 def envia_email_brevo(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para enviar.')
@@ -154,7 +163,8 @@ def envia_email_brevo(palavras_raspadas):
     config = Configuration()
     config.api_key['api-key'] = os.getenv('BREVO_API_KEY')
 
-    api_client = ApiClient(config)
+    api_client = ApiClient(configuration=config)
+    api_client.default_headers["api-key"] = os.getenv('BREVO_API_KEY')
     api = TransactionalEmailsApi(api_client)
 
     for dest in destinatarios:
@@ -167,8 +177,10 @@ def envia_email_brevo(palavras_raspadas):
         api.send_transac_email(send_email)
         print(f"✅ E-mail enviado para {dest}")
 
-# Chamar funções
-conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
+# ================================
+# Execução principal
+# ================================
+conteudo_raspado = raspa_dou()
 palavras_raspadas = procura_termos(conteudo_raspado)
-salva_na_base(palavras_raspadas) 
+salva_na_base(palavras_raspadas)
 envia_email_brevo(palavras_raspadas)
