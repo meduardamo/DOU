@@ -154,17 +154,18 @@ def envia_email_brevo(palavras_raspadas):
     config = Configuration()
     config.api_key['api-key'] = os.getenv('BREVO_API_KEY')
 
-    with ApiClient(config) as api_client:
-        api = TransactionalEmailsApi(api_client)
-        for dest in destinatarios:
-            send_email = SendSmtpEmail(
-                to=[{"email": dest}],
-                sender={"email": email},
-                subject=titulo,
-                html_content=html
-            )
-            api.send_transac_email(send_email)
-            print(f"✅ E-mail enviado para {dest}")
+    api_client = ApiClient(config)
+    api = TransactionalEmailsApi(api_client)
+
+    for dest in destinatarios:
+        send_email = SendSmtpEmail(
+            to=[{"email": dest}],
+            sender={"email": email},
+            subject=titulo,
+            html_content=html
+        )
+        api.send_transac_email(send_email)
+        print(f"✅ E-mail enviado para {dest}")
 
 # Chamar funções
 conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
