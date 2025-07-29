@@ -35,16 +35,6 @@ def raspa_dou(data=None):
         return None
 
 # ================================
-# Função para Formatação da Data
-# ================================
-def formata_data():
-    print('Encontrando a data...')
-    data_atual = date.today()
-    data_formatada = data_atual.strftime('%d-%m-%Y')
-    print('Data encontrada:', data_formatada)
-    return data_formatada
-
-# ================================
 # Função para Procurar Termos
 # ================================
 def procura_termos(conteudo_raspado):
@@ -138,13 +128,16 @@ def envia_email_brevo(palavras_raspadas):
         return
 
     print('Enviando e-mail via Brevo...')
-    email = os.getenv('EMAIL')  # remetente (precisa estar validado no Brevo)
+
+    # Debug temporário
+    print("DEBUG API Key:", os.getenv("BREVO_API_KEY"))
+
+    email = os.getenv('EMAIL')  
     destinatarios = os.getenv('DESTINATARIOS').split(',')
     data = datetime.now().strftime('%d-%m-%Y')
     titulo = f'Busca DOU do dia {data}'
     planilha_url = f'https://docs.google.com/spreadsheets/d/{os.getenv("PLANILHA")}/edit?gid=0'
 
-    # Montar HTML do e-mail
     html = f"""
     <html><body>
       <h1>Consulta ao Diário Oficial da União</h1>
@@ -159,12 +152,14 @@ def envia_email_brevo(palavras_raspadas):
             html += "</ul>"
     html += "</body></html>"
 
-    # Configurar cliente Brevo
+    api_key = os.getenv('BREVO_API_KEY')
+    if not api_key:
+        raise ValueError("❌ BREVO_API_KEY não encontrado no ambiente!")
+
     config = Configuration()
-    config.api_key['api-key'] = os.getenv('BREVO_API_KEY')
+    config.api_key['api-key'] = api_key
 
     api_client = ApiClient(configuration=config)
-    api_client.default_headers["api-key"] = os.getenv('BREVO_API_KEY')
     api = TransactionalEmailsApi(api_client)
 
     for dest in destinatarios:
