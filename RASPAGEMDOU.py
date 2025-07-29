@@ -8,7 +8,7 @@ import re
 from oauth2client.service_account import ServiceAccountCredentials
 from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
-from brevo_python.model.send_smtp_email import SendSmtpEmail
+from brevo_python.models.send_smtp_email import SendSmtpEmail
 
 # Função para Raspagem dos Dados
 def raspa_dou(data=None):
