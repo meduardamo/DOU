@@ -6,8 +6,9 @@ import json
 import gspread
 import re
 from oauth2client.service_account import ServiceAccountCredentials
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+from brevo_python import ApiClient, Configuration
+from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
+from brevo_python.model.send_smtp_email import SendSmtpEmail
 
 # Função para Raspagem dos Dados
 def raspa_dou(data=None):
@@ -121,61 +122,52 @@ def salva_na_base(palavras_raspadas):
     except Exception as e:
         print(f'Erro ao salvar dados: {e}')
 
-# Função para Enviar Email com SendGrid
-def envia_email_sendgrid(palavras_raspadas):
+# Função para Enviar Email
+def envia_email_brevo(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para enviar.')
         return
 
-    print('Enviando e-mail via SendGrid...')
-    email         = os.getenv('EMAIL')
+    print('Enviando e-mail via Brevo...')
+    email = os.getenv('EMAIL')  # remetente (precisa estar validado no Brevo)
     destinatarios = os.getenv('DESTINATARIOS').split(',')
-    data          = datetime.now().strftime('%d-%m-%Y')
-    titulo        = f'Busca DOU do dia {data}'
+    data = datetime.now().strftime('%d-%m-%Y')
+    titulo = f'Busca DOU do dia {data}'
+    planilha_url = f'https://docs.google.com/spreadsheets/d/{os.getenv("PLANILHA")}/edit?gid=0'
 
-    # monta o link da planilha dinamicamente
-    planilha_id  = os.getenv('PLANILHA')
-    planilha_url = f'https://docs.google.com/spreadsheets/d/{planilha_id}/edit?gid=0'
-
-    html = f"""<!DOCTYPE html>
-    <html>
-      <head><title>Busca DOU</title></head>
-      <body>
-        <h1>Consulta ao Diário Oficial da União</h1>
-        <p>
-          As matérias encontradas no dia {data} estão listadas a seguir
-          e já foram armazenadas na
-          <a href="{planilha_url}" target="_blank">planilha</a>.
-        </p>
+    # Montar HTML do e-mail
+    html = f"""
+    <html><body>
+      <h1>Consulta ao Diário Oficial da União</h1>
+      <p>As matérias encontradas no dia {data} estão listadas a seguir e já foram armazenadas na
+      <a href="{planilha_url}" target="_blank">planilha</a>.</p>
     """
-
     for palavra, lista_resultados in palavras_raspadas.items():
         if lista_resultados:
-            html += f"<h2>{palavra}</h2>\n<ul>\n"
-            for resultado in lista_resultados:
-                html += f"  <li><a href='{resultado['href']}'>{resultado['title']}</a></li>\n"
-            html += "</ul>\n"
+            html += f"<h2>{palavra}</h2><ul>"
+            for r in lista_resultados:
+                html += f"<li><a href='{r['href']}'>{r['title']}</a></li>"
+            html += "</ul>"
+    html += "</body></html>"
 
-    html += """  </body>
-    </html>
-    """
+    # Configurar cliente Brevo
+    config = Configuration()
+    config.api_key['api-key'] = os.getenv('BREVO_API_KEY')
 
-    message = Mail(
-        from_email=email,
-        to_emails=destinatarios,
-        subject=titulo,
-        html_content=html
-    )
-
-    try:
-        sg       = SendGridAPIClient(os.getenv('SENDGRID_API_KEY'))
-        response = sg.send(message)
-        print(f'E-mail enviado com sucesso. Status Code: {response.status_code}')
-    except Exception as e:
-        print(f"Erro ao enviar e-mail: {e}")
+    with ApiClient(config) as api_client:
+        api = TransactionalEmailsApi(api_client)
+        for dest in destinatarios:
+            send_email = SendSmtpEmail(
+                to=[{"email": dest}],
+                sender={"email": email},
+                subject=titulo,
+                html_content=html
+            )
+            api.send_transac_email(send_email)
+            print(f"✅ E-mail enviado para {dest}")
 
 # Chamar funções
 conteudo_raspado = raspa_dou()  # Obter conteúdo raspado para data específica
 palavras_raspadas = procura_termos(conteudo_raspado)
 salva_na_base(palavras_raspadas) 
-envia_email_sendgrid(palavras_raspadas)
+envia_email_brevo(palavras_raspadas)
