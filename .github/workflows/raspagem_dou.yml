@@ -11,24 +11,39 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.x'
+        python-version: '3.11'
 
     - name: Install dependencies
-      run: python -m pip install -r requirements.txt
+      run: python -m pip install --upgrade pip && pip install -r requirements.txt
 
-    - name: Create credentials file
-      run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > credentials.json
+    - name: Create credentials.json from secret
+      env:
+        GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+      run: |
+        python - <<'PY'
+        import os, json, pathlib
+        raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+        if not raw:
+            raise SystemExit("Secret GCP_SERVICE_ACCOUNT_JSON não encontrado.")
+        info = json.loads(raw)
+        # Corrige quebras de linha na private_key
+        if "private_key" in info and "\\n" in info["private_key"]:
+            info["private_key"] = info["private_key"].replace("\\n","\n")
+        info["token_uri"] = "https://oauth2.googleapis.com/token"
+        pathlib.Path("credentials.json").write_text(json.dumps(info), encoding="utf-8")
+        print("✅ credentials.json criado")
+        PY
 
-    - name: Execute script
-      run: python RASPAGEMDOU.py
+    - name: Run DOU scraper
       env:
         EMAIL: ${{ secrets.EMAIL }}
         PLANILHA: ${{ secrets.PLANILHA }}
         DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
         BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
+      run: python RASPAGEMDOU.py
