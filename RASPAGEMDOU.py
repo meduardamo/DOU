@@ -233,7 +233,7 @@ def envia_email_brevo(palavras_raspadas):
         print(f"Enviando para: {repr(dest)}")
         send_email = SendSmtpEmail(
             to=[{"email": dest}],
-            sender={"email": sender_email, "name": "Raspagem DOU"},
+            sender={"email": sender_email},
             subject=titulo,
             html_content=html
         )
@@ -256,3 +256,4 @@ if __name__ == "__main__":
     palavras_raspadas = procura_termos(conteudo_raspado)
     salva_na_base(palavras_raspadas)
     envia_email_brevo(palavras_raspadas)
+
