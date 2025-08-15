@@ -2,7 +2,7 @@ name: Raspagem e Notificação Automática
 
 on:
   schedule:
-    - cron: '0 10 * * *'  # 10:00 UTC = 7:00 Brasília
+    - cron: '0 10 * * *'  # 10:00 UTC = 07:00 Brasília
   workflow_dispatch:
 
 jobs:
@@ -42,8 +42,8 @@ jobs:
       - name: Execute script
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
-          PLANILHA: ${{ vars.PLANILHA }}
-          EMAIL: ${{ vars.EMAIL }}
-          DESTINATARIOS: ${{ vars.DESTINATARIOS }}
+          PLANILHA: ${{ secrets.PLANILHA }}          # <= era vars.PLANILHA
+          EMAIL: ${{ secrets.EMAIL }}                # <= era vars.EMAIL
+          DESTINATARIOS: ${{ secrets.DESTINATARIOS }}# <= era vars.DESTINATARIOS
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: python RASPAGEMDOU.py
