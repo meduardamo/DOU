@@ -2,48 +2,48 @@ name: Raspagem e Notificação Automática
 
 on:
   schedule:
-    - cron: '0 10 * * *'  # Executa todos os dias às 10:00 UTC
-  workflow_dispatch:  # Execução manual
+    - cron: '0 10 * * *'  # 10:00 UTC = 7:00 Brasília
+  workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install dependencies
-      run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Create credentials.json from secret
-      env:
-        GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
-      run: |
-        python - <<'PY'
-        import os, json, pathlib
-        raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
-        if not raw:
-            raise SystemExit("Secret GCP_SERVICE_ACCOUNT_JSON não encontrado.")
-        info = json.loads(raw)
-        # Corrige quebras de linha na private_key
-        if "private_key" in info and "\\n" in info["private_key"]:
-            info["private_key"] = info["private_key"].replace("\\n","\n")
-        info["token_uri"] = "https://oauth2.googleapis.com/token"
-        pathlib.Path("credentials.json").write_text(json.dumps(info), encoding="utf-8")
-        print("✅ credentials.json criado")
-        PY
+      - name: Create credentials.json from secret
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+        run: |
+          python - <<'PY'
+          import os, json, pathlib
+          raw = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+          if not raw:
+              raise SystemExit("❌ Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado.")
+          info = json.loads(raw)
+          if "private_key" in info and "\\n" in info["private_key"]:
+              info["private_key"] = info["private_key"].replace("\\n", "\n")
+          pathlib.Path("credentials.json").write_text(json.dumps(info), encoding="utf-8")
+          print("✅ credentials.json criado")
+          PY
 
-    - name: Run DOU scraper
-      env:
-        EMAIL: ${{ secrets.EMAIL }}
-        PLANILHA: ${{ secrets.PLANILHA }}
-        DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
-        BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
-      run: python RASPAGEMDOU.py
+      - name: Execute script
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA: ${{ vars.PLANILHA }}
+          EMAIL: ${{ vars.EMAIL }}
+          DESTINATARIOS: ${{ vars.DESTINATARIOS }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: python RASPAGEMDOU.py
