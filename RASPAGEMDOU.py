@@ -64,6 +64,29 @@ def procura_termos(conteudo_raspado):
     'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
     'Exposição a Fatores de Risco','Departamento de Saúde Mental',
     'Hipertensão Arterial','Alimentação Escolar','PNAE',"Agora Tem Especialistas",
+
+    # --- Alfabetização geral ---
+    'Alfabetização',
+    'Alfabetização na Idade Certa',
+    'Criança Alfabetizada',
+    'Meta de Alfabetização',
+    'Plano Nacional de Alfabetização',
+    'Programa Criança Alfabetizada',
+    'Idade Certa para Alfabetização',
+    'Alfabetização de Crianças',
+    'Alfabetização Inicial',
+    'Alfabetização Plena',
+    'Alfabetização em Língua Portuguesa',
+    'Analfabetismo',
+    'Erradicação do Analfabetismo',
+    'Programa Nacional de Alfabetização na Idade Certa',
+    'Pacto pela Alfabetização',
+    'Política Nacional de Alfabetização',
+    'Recomposição das Aprendizagens em Alfabetização',
+    'Competências de Alfabetização',
+    'Avaliação da Alfabetização',
+    'Saeb Alfabetização',
+
     # --- Matemática (Educação Básica) ---
     'Alfabetização Matemática',
     'Analfabetismo Matemático',
@@ -87,7 +110,6 @@ def procura_termos(conteudo_raspado):
     'Olimpíada de Matemática',
     'PNLD Matemática'
 ]
-
 
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
@@ -279,5 +301,6 @@ if __name__ == "__main__":
     palavras_raspadas = procura_termos(conteudo_raspado)
     salva_na_base(palavras_raspadas)
     envia_email_brevo(palavras_raspadas)
+
 
 
