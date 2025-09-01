@@ -48,23 +48,46 @@ def procura_termos(conteudo_raspado):
 
     print('Buscando palavras-chave...')
     palavras_chave = [
-        'Infância','Criança','Infantil','Infâncias','Crianças',
-        'Educação','Ensino','Escolaridade',
-        'Plano Nacional da Educação','PNE','Educacional',
-        'Alfabetização','Letramento',
-        'Saúde','Telessaúde','Telemedicina',
-        'Digital','Digitais','Prontuário',
-        'Programa Saúde na Escola','PSE',
-        'Psicosocial','Mental','Saúde Mental','Dados para a Saúde','Morte Evitável',
-        'Doenças Crônicas Não Transmissíveis','Rotulagem de Bebidas Alcoólicas',
-        'Educação em Saúde','Bebidas Alcoólicas','Imposto Seletivo',
-        'Rotulagem de Alimentos','Alimentos Ultraprocessados',
-        'Publicidade Infantil','Publicidade de Alimentos Ultraprocessados',
-        'Tributação de Bebidas Alcoólicas','Alíquota de Bebidas Alcoólicas',
-        'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
-        'Exposição a Fatores de Risco','Departamento de Saúde Mental',
-        'Hipertensão Arterial','Alimentação Escolar','PNAE',"Agora Tem Especialistas"
-    ]
+    'Infância','Criança','Infantil','Infâncias','Crianças',
+    'Educação','Ensino','Escolaridade',
+    'Plano Nacional da Educação','PNE','Educacional',
+    'Alfabetização','Letramento',
+    'Saúde','Telessaúde','Telemedicina',
+    'Digital','Digitais','Prontuário',
+    'Programa Saúde na Escola','PSE',
+    'Psicosocial','Mental','Saúde Mental','Dados para a Saúde','Morte Evitável',
+    'Doenças Crônicas Não Transmissíveis','Rotulagem de Bebidas Alcoólicas',
+    'Educação em Saúde','Bebidas Alcoólicas','Imposto Seletivo',
+    'Rotulagem de Alimentos','Alimentos Ultraprocessados',
+    'Publicidade Infantil','Publicidade de Alimentos Ultraprocessados',
+    'Tributação de Bebidas Alcoólicas','Alíquota de Bebidas Alcoólicas',
+    'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
+    'Exposição a Fatores de Risco','Departamento de Saúde Mental',
+    'Hipertensão Arterial','Alimentação Escolar','PNAE',"Agora Tem Especialistas",
+    # --- Matemática (Educação Básica) ---
+    'Alfabetização Matemática',
+    'Analfabetismo Matemático',
+    'Aprendizagem em Matemática',
+    'Recomposição das Aprendizagens em Matemática',
+    'Recomposição de Aprendizagem',
+    'Competências Matemáticas',
+    'Proficiência em Matemática',
+    'Avaliação Diagnóstica de Matemática',
+    'Avaliação Formativa de Matemática',
+    'Política Nacional de Matemática',
+    'Saeb Matemática',
+    'Ideb Matemática',
+    'BNCC Matemática',
+    'Matemática no Ensino Fundamental',
+    'Matemática no Ensino Médio',
+    'Anos Iniciais de Matemática',
+    'Anos Finais de Matemática',
+    'OBMEP',
+    'Olimpíada Brasileira de Matemática das Escolas Públicas',
+    'Olimpíada de Matemática',
+    'PNLD Matemática'
+]
+
 
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in palavras_chave}
@@ -256,4 +279,5 @@ if __name__ == "__main__":
     palavras_raspadas = procura_termos(conteudo_raspado)
     salva_na_base(palavras_raspadas)
     envia_email_brevo(palavras_raspadas)
+
 
