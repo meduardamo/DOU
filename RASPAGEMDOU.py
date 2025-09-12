@@ -67,7 +67,26 @@ def _baixar_conteudo_pagina(url: str) -> str:
         for t in soup(["script", "style", "noscript"]):
             t.decompose()
 
-        # candidatos comuns no portal do DOU
+        # 1) layout típico do DOU: article#materia > div.texto-dou
+        bloco = soup.select_one("article#materia div.texto-dou") or soup.select_one("div.texto-dou")
+        if bloco:
+            ps = []
+            for p in bloco.find_all(["p", "li"]):
+                cls = set(p.get("class") or [])
+                # as classes mais comuns no DOU:
+                if {"dou-paragraph", "identifica", "ementa"} & cls or p.name == "li":
+                    txt = p.get_text(" ", strip=True)
+                    if txt:
+                        ps.append(txt)
+            if ps:
+                txt = "\n\n".join(ps)
+                txt = re.sub(r"[ \t]+", " ", txt).strip()
+                if CONTEUDO_MAX and len(txt) > CONTEUDO_MAX:
+                    txt = txt[:CONTEUDO_MAX] + "…"
+                _CONTENT_CACHE[url] = txt
+                return txt
+
+        # 2) outros contêineres comuns do portal (fallback)
         sels = [
             "div.single-content", "div.article-content", "article",
             "div#content-core", "div#content", "section#content"
@@ -79,19 +98,19 @@ def _baixar_conteudo_pagina(url: str) -> str:
                 continue
             ps = [p.get_text(" ", strip=True) for p in el.find_all(["p", "li"]) if p.get_text(strip=True)]
             if len(ps) >= 2:
-                textos.append(" ".join(ps))
+                textos.append("\n\n".join(ps))
             else:
                 textos.append(el.get_text(" ", strip=True))
 
         txt = max(textos, key=len) if textos else soup.get_text(" ", strip=True)
-        txt = re.sub(r"\s+", " ", txt).strip()
+        txt = re.sub(r"[ \t]+", " ", txt).strip()
         if CONTEUDO_MAX and len(txt) > CONTEUDO_MAX:
             txt = txt[:CONTEUDO_MAX] + "…"
         _CONTENT_CACHE[url] = txt
         return txt
     except Exception:
         return ""
-
+       
 # ============================================================
 # Raspagem do DOU (capa do dia)
 # ============================================================
@@ -471,3 +490,4 @@ if __name__ == "__main__":
     # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
+
