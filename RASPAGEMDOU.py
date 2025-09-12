@@ -1,18 +1,31 @@
 # -*- coding: utf-8 -*-
+"""
+DOU – raspagem diária com duas saídas:
+1) Planilha geral:  Data | Palavra-chave | Portaria | Link | Resumo [| Conteúdo*]
+2) Planilha por cliente (uma aba por sigla):
+   Data | Cliente | Palavra-chave | Portaria | Link | Resumo [| Conteúdo*]
+
+* A coluna "Conteúdo" é opcional. Para ativar, use:
+  DOU_COLETA_CONTEUDO=1  (e opcional DOU_CONTEUDO_MAX=3000)
+"""
+
 import os, re, json, unicodedata, requests, gspread
 from bs4 import BeautifulSoup
 from datetime import datetime
 from google.oauth2.service_account import Credentials
+
+# ======= E-mail (Brevo) – usado apenas para o "geral" =======
 from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
 
-# ================================
+# ============================================================
 # Normalização + busca whole-word
-# ================================
+# ============================================================
 def _normalize(s: str) -> str:
-    if s is None: return ""
+    if s is None:
+        return ""
     t = unicodedata.normalize("NFD", str(s))
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return t.lower()
@@ -22,13 +35,59 @@ def _normalize_ws(s: str) -> str:
 
 def _wholeword_pattern(phrase: str):
     toks = [t for t in _normalize_ws(phrase).split() if t]
-    if not toks: 
+    if not toks:
         return None
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
-# ================================
+# ============================================================
+# Coleta opcional do conteúdo completo da página do DOU
+# ============================================================
+INCLUI_CONTEUDO = os.getenv("DOU_COLETA_CONTEUDO", "0") == "1"  # set "1" para ligar
+CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "3000"))       # limite de caracteres
+_CONTENT_CACHE: dict[str, str] = {}
+
+def _baixar_conteudo_pagina(url: str) -> str:
+    if not url:
+        return ""
+    if url in _CONTENT_CACHE:
+        return _CONTENT_CACHE[url]
+    try:
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # remove scripts/estilos
+        for t in soup(["script", "style", "noscript"]):
+            t.decompose()
+
+        # candidatos comuns no portal do DOU
+        sels = [
+            "div.single-content", "div.article-content", "article",
+            "div#content-core", "div#content", "section#content"
+        ]
+        textos = []
+        for sel in sels:
+            el = soup.select_one(sel)
+            if not el:
+                continue
+            ps = [p.get_text(" ", strip=True) for p in el.find_all(["p", "li"]) if p.get_text(strip=True)]
+            if len(ps) >= 2:
+                textos.append(" ".join(ps))
+            else:
+                textos.append(el.get_text(" ", strip=True))
+
+        txt = max(textos, key=len) if textos else soup.get_text(" ", strip=True)
+        txt = re.sub(r"\s+", " ", txt).strip()
+        if CONTEUDO_MAX and len(txt) > CONTEUDO_MAX:
+            txt = txt[:CONTEUDO_MAX] + "…"
+        _CONTENT_CACHE[url] = txt
+        return txt
+    except Exception:
+        return ""
+
+# ============================================================
 # Raspagem do DOU (capa do dia)
-# ================================
+# ============================================================
 def raspa_dou(data=None):
     if data is None:
         data = datetime.now().strftime('%d-%m-%Y')
@@ -40,9 +99,9 @@ def raspa_dou(data=None):
         soup = BeautifulSoup(page.text, 'html.parser')
         params = soup.find("script", {"id": "params"})
         if params:
-            print('Notícias raspadas')
+            print('Notícias raspadas.')
             return json.loads(params.text)
-        print("Elemento script #params não encontrado.")
+        print("Elemento <script id='params'> não encontrado.")
         return None
     except requests.RequestException as e:
         print(f"Erro ao fazer a requisição: {e}")
@@ -51,9 +110,9 @@ def raspa_dou(data=None):
         print(f"Erro ao decodificar JSON: {e}")
         return None
 
-# ================================
+# ============================================================
 # Palavras gerais (planilha geral)
-# ================================
+# ============================================================
 PALAVRAS_GERAIS = [
     'Infância','Criança','Infantil','Infâncias','Crianças',
     'Educação','Ensino','Escolaridade',
@@ -92,7 +151,9 @@ PALAVRAS_GERAIS = [
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
 def procura_termos(conteudo_raspado):
-    """Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo"""
+    """
+    Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo [| Conteúdo]
+    """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (geral).')
         return None
@@ -106,16 +167,18 @@ def procura_termos(conteudo_raspado):
         titulo   = resultado.get('title', 'Título não disponível')
         resumo   = resultado.get('content', '')
         link     = URL_BASE + resultado.get('urlTitle', '')
-        data_pub = resultado.get('pubDate', '')[:10]
+        data_pub = (resultado.get('pubDate', '') or '')[:10]
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
         for palavra, patt in _PATTERNS_GERAL:
             if patt and patt.search(texto_norm):
+                conteudo_pagina = _baixar_conteudo_pagina(link) if INCLUI_CONTEUDO else ""
                 resultados_por_palavra[palavra].append({
                     'date': data_pub,
                     'title': titulo,
                     'href': link,
-                    'abstract': resumo
+                    'abstract': resumo,
+                    'content_page': conteudo_pagina
                 })
                 algum = True
 
@@ -125,9 +188,9 @@ def procura_termos(conteudo_raspado):
     print('Palavras-chave (geral) encontradas.')
     return resultados_por_palavra
 
-# ================================
+# ============================================================
 # Cliente → Palavras (whole-word)
-# ================================
+# ============================================================
 CLIENT_THEME_DATA = """
 IAS|Educação|Matemática; Alfabetização; Alfabetização Matemática; Recomposição de aprendizagem; Plano Nacional de Educação
 ISG|Educação|Tempo Integral; Ensino em tempo integral; Ensino Profissional e Tecnológico; Fundeb; PROPAG; Educação em tempo integral; Escola em tempo integral; Plano Nacional de Educação; Programa escola em tempo integral; Programa Pé-de-meia; PNEERQ; INEP; FNDE; Conselho Nacional de Educação; PDDE; Programa de Fomento às Escolas de Ensino Médio em Tempo Integral; Celular nas escolas; Juros da Educação
@@ -146,7 +209,8 @@ Vital Strategies|Saúde|Saúde mental; Dados para a saúde; Morte evitável; Doe
 def _parse_client_keywords(text: str):
     out = {}
     for line in text.splitlines():
-        if not line.strip(): continue
+        if not line.strip():
+            continue
         cliente, tema, kws = [x.strip() for x in line.split("|", 2)]
         out.setdefault(cliente, [])
         for kw in [k.strip() for k in kws.split(";") if k.strip()]:
@@ -167,7 +231,7 @@ for cli, kws in CLIENT_KEYWORDS.items():
 def procura_termos_clientes(conteudo_raspado):
     """
     Retorna dict cliente -> [rows] onde cada row é:
-    [Data, Cliente, Palavra-chave, Portaria, Link, Resumo]
+    [Data, Cliente, Palavra-chave, Portaria, Link, Resumo (,+ Conteúdo)]
     (uma linha por palavra-chave encontrada por cliente)
     """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
@@ -181,21 +245,21 @@ def procura_termos_clientes(conteudo_raspado):
     for r in conteudo_raspado['jsonArray']:
         titulo   = r.get('title', 'Título não disponível')
         resumo   = r.get('content', '')
-        link     = URL_BASE + r.get('urlTitle','')
-        data_pub = r.get('pubDate', '')[:10]
-
+        link     = URL_BASE + r.get('urlTitle', '')
+        data_pub = (r.get('pubDate', '') or '')[:10]
         texto_norm = _normalize_ws(titulo + " " + resumo)
 
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
-                por_cliente[cliente].append([
-                    data_pub, cliente, kw, titulo, link, resumo
-                ])
+                row = [data_pub, cliente, kw, titulo, link, resumo]
+                if INCLUI_CONTEUDO:
+                    row.append(_baixar_conteudo_pagina(link))
+                por_cliente[cliente].append(row)
     return por_cliente
 
-# ================================
+# ============================================================
 # Google Sheets helpers
-# ================================
+# ============================================================
 def _gs_client_from_env():
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if not raw:
@@ -213,9 +277,17 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-# ---- Geral: Data | Palavra-chave | Portaria | Link | Resumo
-COLS_GERAL = ["Data","Palavra-chave","Portaria","Link","Resumo"]
+# ---- Colunas dinâmicas (dependem de INCLUI_CONTEUDO)
+COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo"] + (["Conteúdo"] if INCLUI_CONTEUDO else [])
+COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo"] + (["Conteúdo"] if INCLUI_CONTEUDO else [])
 
+def _ensure_header(ws, header):
+    first = ws.row_values(1)
+    if first != header:
+        ws.resize(rows=max(2, ws.row_count), cols=len(header))
+        ws.update('1:1', [header])
+
+# ---- Geral
 def salva_na_base(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para salvar (geral).')
@@ -232,24 +304,21 @@ def salva_na_base(palavras_raspadas):
         ws = sh.worksheet('Página1')
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title='Página1', rows="2000", cols=str(len(COLS_GERAL)))
-        ws.update('1:1', [COLS_GERAL])
-
-    # garante cabeçalho
-    first = ws.row_values(1)
-    if first != COLS_GERAL:
-        ws.resize(rows=max(2, ws.row_count), cols=len(COLS_GERAL))
-        ws.update('1:1', [COLS_GERAL])
+    _ensure_header(ws, COLS_GERAL)
 
     rows_to_append = []
-    for palavra, lista in palavras_raspadas.items():
+    for palavra, lista in (palavras_raspadas or {}).items():
         for item in lista:
-            rows_to_append.append([
+            row = [
                 item.get('date',''),
                 palavra,
                 item.get('title',''),
                 item.get('href',''),
-                item.get('abstract','')
-            ])
+                item.get('abstract',''),
+            ]
+            if INCLUI_CONTEUDO:
+                row.append(item.get('content_page',''))
+            rows_to_append.append(row)
 
     if rows_to_append:
         ws.append_rows(rows_to_append, value_input_option='USER_ENTERED')
@@ -257,36 +326,31 @@ def salva_na_base(palavras_raspadas):
     else:
         print('Nenhum dado válido para salvar (geral).')
 
-# ---- Por cliente: Data | Cliente | Palavra-chave | Portaria | Link | Resumo
-COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo"]
-
-def _ensure_header(ws, header):
-    first = ws.row_values(1)
-    if first != header:
-        ws.resize(rows=max(2, ws.row_count), cols=len(header))
-        ws.update('1:1', [header])
-
+# ---- Por cliente
 def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if not rows:
         print(f"[{sheet_name}] sem linhas para anexar.")
         return
     try:
         ws = sh.worksheet(sheet_name)
-        _ensure_header(ws, COLS_CLIENTE)
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=sheet_name, rows=str(max(100, len(rows)+10)), cols=len(COLS_CLIENTE))
-        _ensure_header(ws, COLS_CLIENTE)
+    _ensure_header(ws, COLS_CLIENTE)
 
     # dedupe por (Link, Palavra-chave, Cliente)
+    link_idx    = COLS_CLIENTE.index("Link")
+    palavra_idx = COLS_CLIENTE.index("Palavra-chave")
+    cliente_idx = COLS_CLIENTE.index("Cliente")
+
     all_vals = ws.get_all_values()
     existing = set()
     if len(all_vals) > 1:
-        # índices: Data(0) Cliente(1) Palavra(2) Portaria(3) Link(4) Resumo(5)
         for r in all_vals[1:]:
-            if len(r) >= 5:
-                existing.add((r[4].strip(), r[2].strip(), r[1].strip()))
-
-    new = [r for r in rows if (r[4].strip(), r[2].strip(), r[1].strip()) not in existing]
+            if len(r) > link_idx:
+                existing.add((r[link_idx].strip(),
+                              r[palavra_idx].strip(),
+                              r[cliente_idx].strip()))
+    new = [r for r in rows if (r[link_idx].strip(), r[palavra_idx].strip(), r[cliente_idx].strip()) not in existing]
     if not new:
         print(f"[{sheet_name}] nada novo.")
         return
@@ -314,9 +378,9 @@ def salva_por_cliente(por_cliente: dict):
     for cli, rows in (por_cliente or {}).items():
         _append_dedupe_por_cliente(sh, cli, rows)
 
-# ================================
+# ============================================================
 # E-mail (Brevo) — somente GERAL
-# ================================
+# ============================================================
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
 
 def _sanitize_emails(raw_list: str):
@@ -327,7 +391,8 @@ def _sanitize_emails(raw_list: str):
     for it in parts:
         s = unicodedata.normalize("NFKC", it)
         s = re.sub(r'[\u200B-\u200D\uFEFF]', '', s).strip().strip("'").strip('"')
-        if not s: continue
+        if not s:
+            continue
         m = EMAIL_RE.match(s)
         candidate = (m.group(2) if m else s).strip()
         if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate) and candidate.lower() not in seen:
@@ -383,17 +448,17 @@ def envia_email_brevo(palavras_raspadas):
         except (ApiException, Exception) as e:
             print(f"❌ Falha ao enviar para {dest}: {e}")
 
-# ================================
+# ============================================================
 # Execução principal
-# ================================
+# ============================================================
 if __name__ == "__main__":
     conteudo = raspa_dou()
 
-    # 1) planilha geral
+    # 1) Planilha geral
     geral = procura_termos(conteudo)
     salva_na_base(geral)
     envia_email_brevo(geral)  # e-mail só do geral
 
-    # 2) planilha por cliente (uma aba por sigla)
+    # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
