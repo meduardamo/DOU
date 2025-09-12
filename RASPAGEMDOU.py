@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 DOU – raspagem diária com duas saídas:
-1) Planilha geral:  Data | Palavra-chave | Portaria | Link | Resumo [| Conteúdo*]
+1) Planilha geral (aba "Página1"):
+   Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
 2) Planilha por cliente (uma aba por sigla):
-   Data | Cliente | Palavra-chave | Portaria | Link | Resumo [| Conteúdo*]
+   Data | Cliente | Palavra-chave | Portaria | Link | Resumo | Conteúdo
 
-* A coluna "Conteúdo" é opcional. Para ativar, use:
-  DOU_COLETA_CONTEUDO=1  (e opcional DOU_CONTEUDO_MAX=3000)
+Observação:
+- A coluna "Conteúdo" SEMPRE é preenchida automaticamente com o texto da página do DOU.
+- Limite padrão de caracteres = 3000 (mude com env DOU_CONTEUDO_MAX).
 """
 
 import os, re, json, unicodedata, requests, gspread
@@ -40,11 +42,16 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
 # ============================================================
-# Coleta opcional do conteúdo completo da página do DOU
+# Coleta do conteúdo completo da página do DOU (sempre ligada)
 # ============================================================
-INCLUI_CONTEUDO = os.getenv("DOU_COLETA_CONTEUDO", "0") == "1"  # set "1" para ligar
-CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "3000"))       # limite de caracteres
+CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "3000"))  # limite de caracteres
 _CONTENT_CACHE: dict[str, str] = {}
+
+_HDR = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/126 Safari/537.36"
+}
 
 def _baixar_conteudo_pagina(url: str) -> str:
     if not url:
@@ -52,7 +59,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
     if url in _CONTENT_CACHE:
         return _CONTENT_CACHE[url]
     try:
-        r = requests.get(url, timeout=30)
+        r = requests.get(url, timeout=40, headers=_HDR)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -94,7 +101,7 @@ def raspa_dou(data=None):
     print(f'Raspando as notícias do dia {data}...')
     try:
         url = f'http://www.in.gov.br/leiturajornal?data={data}'
-        page = requests.get(url, timeout=40)
+        page = requests.get(url, timeout=40, headers=_HDR)
         page.raise_for_status()
         soup = BeautifulSoup(page.text, 'html.parser')
         params = soup.find("script", {"id": "params"})
@@ -152,13 +159,13 @@ _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
 def procura_termos(conteudo_raspado):
     """
-    Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo [| Conteúdo]
+    Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
     """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (geral).')
         return None
 
-    print('Buscando palavras-chave (geral, whole-word, título+conteúdo)...')
+    print('Buscando palavras-chave (geral, whole-word, título+resumo)...')
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     resultados_por_palavra = {palavra: [] for palavra in PALAVRAS_GERAIS}
     algum = False
@@ -170,9 +177,12 @@ def procura_termos(conteudo_raspado):
         data_pub = (resultado.get('pubDate', '') or '')[:10]
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
+        conteudo_pagina = None  # baixa apenas se houver match
+
         for palavra, patt in _PATTERNS_GERAL:
             if patt and patt.search(texto_norm):
-                conteudo_pagina = _baixar_conteudo_pagina(link) if INCLUI_CONTEUDO else ""
+                if conteudo_pagina is None:
+                    conteudo_pagina = _baixar_conteudo_pagina(link)
                 resultados_por_palavra[palavra].append({
                     'date': data_pub,
                     'title': titulo,
@@ -231,14 +241,14 @@ for cli, kws in CLIENT_KEYWORDS.items():
 def procura_termos_clientes(conteudo_raspado):
     """
     Retorna dict cliente -> [rows] onde cada row é:
-    [Data, Cliente, Palavra-chave, Portaria, Link, Resumo (,+ Conteúdo)]
+    [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
     (uma linha por palavra-chave encontrada por cliente)
     """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (clientes).')
         return {}
 
-    print('Buscando palavras-chave por cliente (whole-word, título+conteúdo)...')
+    print('Buscando palavras-chave por cliente (whole-word, título+resumo)...')
     URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
     por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
 
@@ -249,12 +259,12 @@ def procura_termos_clientes(conteudo_raspado):
         data_pub = (r.get('pubDate', '') or '')[:10]
         texto_norm = _normalize_ws(titulo + " " + resumo)
 
+        conteudo_pagina = None
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
-                row = [data_pub, cliente, kw, titulo, link, resumo]
-                if INCLUI_CONTEUDO:
-                    row.append(_baixar_conteudo_pagina(link))
-                por_cliente[cliente].append(row)
+                if conteudo_pagina is None:
+                    conteudo_pagina = _baixar_conteudo_pagina(link)
+                por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina])
     return por_cliente
 
 # ============================================================
@@ -277,9 +287,9 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-# ---- Colunas dinâmicas (dependem de INCLUI_CONTEUDO)
-COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo"] + (["Conteúdo"] if INCLUI_CONTEUDO else [])
-COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo"] + (["Conteúdo"] if INCLUI_CONTEUDO else [])
+# ---- Colunas FIXAS (Conteúdo é sempre a última)
+COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
+COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
 
 def _ensure_header(ws, header):
     first = ws.row_values(1)
@@ -315,9 +325,8 @@ def salva_na_base(palavras_raspadas):
                 item.get('title',''),
                 item.get('href',''),
                 item.get('abstract',''),
+                item.get('content_page','')
             ]
-            if INCLUI_CONTEUDO:
-                row.append(item.get('content_page',''))
             rows_to_append.append(row)
 
     if rows_to_append:
@@ -348,8 +357,8 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
         for r in all_vals[1:]:
             if len(r) > link_idx:
                 existing.add((r[link_idx].strip(),
-                              r[palavra_idx].strip(),
-                              r[cliente_idx].strip()))
+                              r[palavra_idx].strip() if len(r) > palavra_idx else "",
+                              r[cliente_idx].strip() if len(r) > cliente_idx else ""))
     new = [r for r in rows if (r[link_idx].strip(), r[palavra_idx].strip(), r[cliente_idx].strip()) not in existing]
     if not new:
         print(f"[{sheet_name}] nada novo.")
