@@ -349,7 +349,7 @@ def salva_na_base(palavras_raspadas):
             rows_to_append.append(row)
 
     if rows_to_append:
-        ws.append_rows(rows_to_append, value_input_option='USER_ENTERED')
+        ws.insert_rows(rows_to_append, row=2, value_input_option='USER_ENTERED')
         print(f"{len(rows_to_append)} linhas adicionadas (geral).")
     else:
         print('Nenhum dado válido para salvar (geral).')
@@ -383,7 +383,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
         print(f"[{sheet_name}] nada novo.")
         return
 
-    ws.append_rows(new, value_input_option="USER_ENTERED")
+    ws.insert_rows(new, row=2, value_input_option="USER_ENTERED")
     print(f"[{sheet_name}] +{len(new)} linhas.")
 
 def salva_por_cliente(por_cliente: dict):
@@ -490,6 +490,7 @@ if __name__ == "__main__":
     # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
+
 
 
 
