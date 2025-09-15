@@ -44,7 +44,7 @@ def _wholeword_pattern(phrase: str):
 # ============================================================
 # Coleta do conteúdo completo da página do DOU (sempre ligada)
 # ============================================================
-CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "100000"))  # limite de caracteres
+CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "50000"))  # limite de caracteres
 _CONTENT_CACHE: dict[str, str] = {}
 
 _HDR = {
@@ -490,5 +490,6 @@ if __name__ == "__main__":
     # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
+
 
 
