@@ -2,12 +2,13 @@ name: Raspagem e Notificação Automática
 
 on:
   schedule:
-    - cron: '0 10 * * *'  # 10:00 UTC = 07:00 Brasília
+    - cron: '0 10 * * *'   # 07:00 BRT
   workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,12 +39,23 @@ jobs:
           print("✅ credentials.json criado")
           PY
 
-      - name: Execute script
+      # 1) Raspagem + gravação nas planilhas (geral e por cliente) + envio de email do "geral"
+      - name: Run DOU scraping
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
-          PLANILHA: ${{ secrets.PLANILHA }}                    # planilha geral
+          PLANILHA: ${{ secrets.PLANILHA }}                    # planilha geral (aba Página1)
           PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}  # planilha com abas por cliente
           EMAIL: ${{ secrets.EMAIL }}
           DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-        run: python RASPAGEMDOU.py
+        run: |
+          python raspagemdou.py
+
+      # 2) Alinhamento nas abas por cliente (usa coluna "Conteúdo"; pula "Giro de notícias")
+      - name: Run DOU alignment (per client tabs)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
+          GENAI_API_KEY: ${{ secrets.GENAI_API_KEY }}
+        run: |
+          python alinhamento_dou.py
