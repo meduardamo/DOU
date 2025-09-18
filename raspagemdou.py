@@ -9,6 +9,8 @@ DOU – raspagem diária com duas saídas:
 Observação:
 - A coluna "Conteúdo" SEMPRE é preenchida automaticamente com o texto da página do DOU.
 - Limite padrão de caracteres = 3000 (mude com env DOU_CONTEUDO_MAX).
+
+Este arquivo inclui bloqueio de menções ao Conselho Regional de Educação Física (CREF/CONFEF).
 """
 
 import os, re, json, unicodedata, requests, gspread
@@ -42,6 +44,26 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
 # ============================================================
+# BLOQUEIO DE MENÇÕES (CREF/CONFEF)
+# ============================================================
+EXCLUDE_PATTERNS = [
+    _wholeword_pattern("Conselho Regional de Educação Física"),
+    _wholeword_pattern("Conselho Regional de Educacao Fisica"),  # sem acento
+    re.compile(r"\bCREF\b", re.I),    # opcional: bloqueia sigla
+    re.compile(r"\bCONFEF\b", re.I),  # opcional: conselho federal
+]
+
+def _is_blocked(text: str) -> bool:
+    """Retorna True se o texto contiver menções bloqueadas."""
+    if not text:
+        return False
+    nt = _normalize_ws(text)
+    for pat in EXCLUDE_PATTERNS:
+        if pat and pat.search(nt):
+            return True
+    return False
+
+# ============================================================
 # Coleta do conteúdo completo da página do DOU (sempre ligada)
 # ============================================================
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))  # limite de caracteres
@@ -73,7 +95,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
             ps = []
             for p in bloco.find_all(["p", "li"]):
                 cls = set(p.get("class") or [])
-                # as classes mais comuns no DOU:
+                # classes comuns no DOU:
                 if {"dou-paragraph", "identifica", "ementa"} & cls or p.name == "li":
                     txt = p.get_text(" ", strip=True)
                     if txt:
@@ -195,6 +217,10 @@ def procura_termos(conteudo_raspado):
         link     = URL_BASE + resultado.get('urlTitle', '')
         data_pub = (resultado.get('pubDate', '') or '')[:10]
 
+        # corta cedo se título/resumo já indicarem menção bloqueada
+        if _is_blocked(titulo + " " + resumo):
+            continue
+
         texto_norm = _normalize_ws(titulo + " " + resumo)
         conteudo_pagina = None  # baixa apenas se houver match
 
@@ -202,6 +228,9 @@ def procura_termos(conteudo_raspado):
             if patt and patt.search(texto_norm):
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
+                # corta se o conteúdo completo tiver menção bloqueada
+                if _is_blocked(conteudo_pagina):
+                    continue
                 resultados_por_palavra[palavra].append({
                     'date': data_pub,
                     'title': titulo,
@@ -276,13 +305,20 @@ def procura_termos_clientes(conteudo_raspado):
         resumo   = r.get('content', '')
         link     = URL_BASE + r.get('urlTitle', '')
         data_pub = (r.get('pubDate', '') or '')[:10]
-        texto_norm = _normalize_ws(titulo + " " + resumo)
 
+        # corta cedo por título/resumo
+        if _is_blocked(titulo + " " + resumo):
+            continue
+
+        texto_norm = _normalize_ws(titulo + " " + resumo)
         conteudo_pagina = None
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
+                # corta por conteúdo completo
+                if _is_blocked(conteudo_pagina):
+                    continue
                 por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina])
     return por_cliente
 
@@ -490,8 +526,3 @@ if __name__ == "__main__":
     # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
-
-
-
-
-
