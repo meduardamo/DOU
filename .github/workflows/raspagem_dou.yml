@@ -1,4 +1,4 @@
-name: Raspagem e Notificação Automática
+name: DOU
 
 on:
   schedule:
