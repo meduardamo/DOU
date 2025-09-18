@@ -2,7 +2,7 @@ name: DOU Extra
 
 on:
   schedule:
-    - cron: "0 * * * *"   # roda de 1 em 1 hora, no minuto 0 (GitHub Actions usa UTC)
+    - cron: "0 * * * *"   # roda de 1 em 1 hora, no minuto 0
   workflow_dispatch: {}
 
 jobs:
