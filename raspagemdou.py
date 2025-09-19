@@ -9,9 +9,7 @@ DOU – raspagem diária com duas saídas:
 Observação:
 - A coluna "Conteúdo" SEMPRE é preenchida automaticamente com o texto da página do DOU.
 - Limite padrão de caracteres = 3000 (mude com env DOU_CONTEUDO_MAX).
-
-Este arquivo inclui bloqueio de menções ao Conselho Regional de Educação Física (CREF/CONFEF)
-e envio de e-mail agrupado por cliente/palavra-chave.
+- Inclui bloqueio de menções ao Conselho Regional/Federal de Educação Física (CREF/CONFEF).
 """
 
 import os, re, json, unicodedata, requests, gspread
@@ -49,13 +47,14 @@ def _wholeword_pattern(phrase: str):
 # ============================================================
 EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Regional de Educação Física"),
-    _wholeword_pattern("Conselho Regional de Educacao Fisica"),  # sem acento
-    re.compile(r"\bCREF\b", re.I),    # opcional: bloqueia sigla
-    re.compile(r"\bCONFEF\b", re.I),  # opcional: conselho federal
+    _wholeword_pattern("Conselho Federal de Educação Física"),
+    _wholeword_pattern("Conselho Regional de Educacao Fisica"),
+    _wholeword_pattern("Conselho Federal de Educacao Fisica"),
+    re.compile(r"\bCREF\b", re.I),
+    re.compile(r"\bCONFEF\b", re.I),
 ]
 
 def _is_blocked(text: str) -> bool:
-    """Retorna True se o texto contiver menções bloqueadas."""
     if not text:
         return False
     nt = _normalize_ws(text)
@@ -65,7 +64,7 @@ def _is_blocked(text: str) -> bool:
     return False
 
 # ============================================================
-# Coleta do conteúdo completo da página do DOU (sempre ligada)
+# Coleta do conteúdo completo da página do DOU
 # ============================================================
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))  # limite de caracteres
 _CONTENT_CACHE: dict[str, str] = {}
@@ -86,11 +85,9 @@ def _baixar_conteudo_pagina(url: str) -> str:
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # remove scripts/estilos
         for t in soup(["script", "style", "noscript"]):
             t.decompose()
 
-        # 1) layout típico do DOU: article#materia > div.texto-dou
         bloco = soup.select_one("article#materia div.texto-dou") or soup.select_one("div.texto-dou")
         if bloco:
             ps = []
@@ -108,7 +105,6 @@ def _baixar_conteudo_pagina(url: str) -> str:
                 _CONTENT_CACHE[url] = txt
                 return txt
 
-        # 2) outros contêineres comuns do portal (fallback)
         sels = [
             "div.single-content", "div.article-content", "article",
             "div#content-core", "div#content", "section#content"
@@ -132,7 +128,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
         return txt
     except Exception:
         return ""
-       
+
 # ============================================================
 # Raspagem do DOU (capa do dia)
 # ============================================================
@@ -199,9 +195,6 @@ PALAVRAS_GERAIS = [
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
 def procura_termos(conteudo_raspado):
-    """
-    Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
-    """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (geral).')
         return None
@@ -217,18 +210,16 @@ def procura_termos(conteudo_raspado):
         link     = URL_BASE + resultado.get('urlTitle', '')
         data_pub = (resultado.get('pubDate', '') or '')[:10]
 
-        # corta cedo se título/resumo já indicarem menção bloqueada
         if _is_blocked(titulo + " " + resumo):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
-        conteudo_pagina = None  # baixa apenas se houver match
+        conteudo_pagina = None
 
         for palavra, patt in _PATTERNS_GERAL:
             if patt and patt.search(texto_norm):
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
-                # corta se o conteúdo completo tiver menção bloqueada
                 if _is_blocked(conteudo_pagina):
                     continue
                 resultados_por_palavra[palavra].append({
@@ -278,8 +269,7 @@ def _parse_client_keywords(text: str):
 
 CLIENT_KEYWORDS = _parse_client_keywords(CLIENT_THEME_DATA)
 
-# pré-compila padrões por cliente
-CLIENT_PATTERNS = []  # (regex, cliente, kw_original)
+CLIENT_PATTERNS = []
 for cli, kws in CLIENT_KEYWORDS.items():
     for kw in kws:
         pat = _wholeword_pattern(kw)
@@ -287,11 +277,6 @@ for cli, kws in CLIENT_KEYWORDS.items():
             CLIENT_PATTERNS.append((pat, cli, kw))
 
 def procura_termos_clientes(conteudo_raspado):
-    """
-    Retorna dict cliente -> [rows] onde cada row é:
-    [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
-    (uma linha por palavra-chave encontrada por cliente)
-    """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (clientes).')
         return {}
@@ -306,7 +291,6 @@ def procura_termos_clientes(conteudo_raspado):
         link     = URL_BASE + r.get('urlTitle', '')
         data_pub = (r.get('pubDate', '') or '')[:10]
 
-        # corta cedo por título/resumo
         if _is_blocked(titulo + " " + resumo):
             continue
 
@@ -316,7 +300,6 @@ def procura_termos_clientes(conteudo_raspado):
             if pat.search(texto_norm):
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
-                # corta por conteúdo completo
                 if _is_blocked(conteudo_pagina):
                     continue
                 por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina])
@@ -328,7 +311,6 @@ def procura_termos_clientes(conteudo_raspado):
 def _gs_client_from_env():
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if not raw:
-        # fallback: se já criou credentials.json no workflow
         jf = "credentials.json"
         if os.path.exists(jf):
             scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
@@ -342,7 +324,6 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-# ---- Colunas FIXAS (Conteúdo é sempre a última)
 COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
 COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
 
@@ -352,7 +333,6 @@ def _ensure_header(ws, header):
         ws.resize(rows=max(2, ws.row_count), cols=len(header))
         ws.update('1:1', [header])
 
-# ---- Geral
 def salva_na_base(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para salvar (geral).')
@@ -362,7 +342,7 @@ def salva_na_base(palavras_raspadas):
     gc = _gs_client_from_env()
     planilha_id = os.getenv('PLANILHA')
     if not planilha_id:
-        raise RuntimeError("Env PLANILHA não definido (use apenas a key entre /d/ e /edit).")
+        raise RuntimeError("Env PLANILHA não definido.")
 
     sh = gc.open_by_key(planilha_id)
     try:
@@ -374,15 +354,14 @@ def salva_na_base(palavras_raspadas):
     rows_to_append = []
     for palavra, lista in (palavras_raspadas or {}).items():
         for item in lista:
-            row = [
+            rows_to_append.append([
                 item.get('date',''),
                 palavra,
                 item.get('title',''),
                 item.get('href',''),
                 item.get('abstract',''),
                 item.get('content_page','')
-            ]
-            rows_to_append.append(row)
+            ])
 
     if rows_to_append:
         ws.insert_rows(rows_to_append, row=2, value_input_option='USER_ENTERED')
@@ -390,7 +369,6 @@ def salva_na_base(palavras_raspadas):
     else:
         print('Nenhum dado válido para salvar (geral).')
 
-# ---- Por cliente
 def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if not rows:
         print(f"[{sheet_name}] sem linhas para anexar.")
@@ -401,7 +379,6 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
         ws = sh.add_worksheet(title=sheet_name, rows=str(max(100, len(rows)+10)), cols=len(COLS_CLIENTE))
     _ensure_header(ws, COLS_CLIENTE)
 
-    # dedupe por (Link, Palavra-chave, Cliente)
     link_idx    = COLS_CLIENTE.index("Link")
     palavra_idx = COLS_CLIENTE.index("Palavra-chave")
     cliente_idx = COLS_CLIENTE.index("Cliente")
@@ -430,7 +407,6 @@ def salva_por_cliente(por_cliente: dict):
     gc = _gs_client_from_env()
     sh = gc.open_by_key(plan_id)
 
-    # Garante existência das abas
     for cli in CLIENT_KEYWORDS.keys():
         try:
             ws = sh.worksheet(cli)
@@ -443,7 +419,7 @@ def salva_por_cliente(por_cliente: dict):
         _append_dedupe_por_cliente(sh, cli, rows)
 
 # ============================================================
-# E-mail (Brevo) — GERAL (já existente)
+# E-mails
 # ============================================================
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
 
@@ -463,128 +439,106 @@ def _sanitize_emails(raw_list: str):
             seen.add(candidate.lower()); emails.append(candidate.lower())
     return emails
 
-def envia_email_brevo(palavras_raspadas):
+def _brevo_client():
+    api_key = os.getenv('BREVO_API_KEY')
+    if not api_key:
+        return None
+    cfg = Configuration()
+    cfg.api_key['api-key'] = api_key
+    return TransactionalEmailsApi(ApiClient(configuration=cfg))
+
+def envia_email_geral(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para enviar (geral).')
         return
-    print('Enviando e-mail via Brevo (geral)...')
-
-    api_key = os.getenv('BREVO_API_KEY')
-    sender_email = os.getenv('EMAIL')
-    raw_dest = os.getenv('DESTINATARIOS', '')
-    if not (api_key and sender_email and raw_dest):
-        print("Dados de e-mail incompletos; pulando envio.")
+    sender_email = os.getenv('EMAIL'); raw_dest = os.getenv('DESTINATARIOS', '')
+    planilha_id  = os.getenv("PLANILHA")
+    api = _brevo_client()
+    if not (api and sender_email and raw_dest and planilha_id):
+        print("Dados incompletos; pulando envio (geral).")
         return
-
     destinatarios = _sanitize_emails(raw_dest)
     data = datetime.now().strftime('%d-%m-%Y')
-    titulo = f'Busca DOU do dia {data}'
-    planilha_url = f'https://docs.google.com/spreadsheets/d/{os.getenv("PLANILHA")}/edit?gid=0'
-
+    titulo = f'Resultados do Diário Oficial — {data}'
+    planilha_url = f'https://docs.google.com/spreadsheets/d/{planilha_id}/edit?gid=0'
     parts = [
         "<html><body>",
         "<h1>Consulta ao Diário Oficial da União</h1>",
-        f"<p>As matérias encontradas no dia {data} estão listadas a seguir e já foram armazenadas na ",
-        f'<a href="{planilha_url}" target="_blank">planilha</a>.</p>'
+        f"<p>As matérias já estão na <a href='{planilha_url}' target='_blank'>planilha</a>.</p>"
     ]
     for palavra, lista in (palavras_raspadas or {}).items():
         if lista:
             parts.append(f"<h2>{palavra}</h2><ul>")
             for r in lista:
-                link = r.get('href', '#')
-                title = r.get('title', '(sem título)')
+                link = r.get('href', '#'); title = r.get('title', '(sem título)')
                 parts.append(f"<li><a href='{link}'>{title}</a></li>")
             parts.append("</ul>")
     parts.append("</body></html>")
     html = "".join(parts)
-
-    cfg = Configuration(); cfg.api_key['api-key'] = api_key
-    api = TransactionalEmailsApi(ApiClient(configuration=cfg))
     for dest in destinatarios:
         try:
-            api.send_transac_email(SendSmtpEmail(
-                to=[{"email": dest}],
-                sender={"email": sender_email},
-                subject=titulo,
-                html_content=html
-            ))
-            print(f"✅ E-mail enviado para {dest}")
+            api.send_transac_email(SendSmtpEmail(to=[{"email": dest}],
+                                                sender={"email": sender_email},
+                                                subject=titulo, html_content=html))
+            print(f"✅ E-mail (geral) enviado para {dest}")
         except (ApiException, Exception) as e:
-            print(f"❌ Falha ao enviar para {dest}: {e}")
+            print(f"❌ Falha ao enviar (geral) para {dest}: {e}")
 
-# ============================================================
-# E-mail (Brevo) — POR CLIENTE (NOVO)
-# ============================================================
-def envia_email_brevo_clientes(por_cliente: dict):
-    """
-    Envia e-mail agrupado por Cliente -> Palavra-chave -> Itens.
-    Usa DESTINATARIOS_CLIENTES (se existir) ou fallback para DESTINATARIOS.
-    """
-    # checa se há algum conteúdo
-    has_any = any(por_cliente.get(cli) for cli in por_cliente or {})
-    if not has_any:
-        print("Sem itens por cliente para enviar.")
+def envia_email_clientes(por_cliente: dict):
+    """E-mail com resultados organizados por cliente, assunto padronizado e link da planilha."""
+    if not por_cliente:
+        print("Sem resultados para enviar (clientes).")
         return
-
-    api_key = os.getenv('BREVO_API_KEY')
-    sender_email = os.getenv('EMAIL')
-    raw_dest = os.getenv('DESTINATARIOS_CLIENTES') or os.getenv('DESTINATARIOS', '')
-    if not (api_key and sender_email and raw_dest):
-        print("Dados de e-mail (clientes) incompletos; pulando envio.")
+    sender_email = os.getenv("EMAIL")
+    raw_dest = os.getenv("DESTINATARIOS", "")
+    planilha_id_clientes = os.getenv("PLANILHA_CLIENTES")
+    api = _brevo_client()
+    if not (api and sender_email and raw_dest and planilha_id_clientes):
+        print("Dados de e-mail incompletos; pulando envio (clientes).")
         return
 
     destinatarios = _sanitize_emails(raw_dest)
-    data = datetime.now().strftime('%d-%m-%Y')
-    titulo = f'DOU – Clientes – {data}'
+    data = datetime.now().strftime("%d-%m-%Y")
+    titulo = f"Resultados do Diário Oficial (Clientes) – {data}"
+    planilha_url = f"https://docs.google.com/spreadsheets/d/{planilha_id_clientes}/edit?gid=0"
 
-    # link da planilha por clientes
-    planilha_clientes_id = os.getenv("PLANILHA_CLIENTES")
-    planilha_clientes_url = f'https://docs.google.com/spreadsheets/d/{planilha_clientes_id}/edit' if planilha_clientes_id else "#"
-
-    # monta HTML agrupado
     parts = [
         "<html><body>",
-        f"<h2>Resultados do Diário Oficial – {data}</h2>",
-        "<p>As ocorrências já foram registradas por cliente. Seguem os destaques:</p>"
+        "<h1>Consulta ao Diário Oficial da União (Clientes)</h1>",
+        f"<p>Os resultados já estão na <a href='{planilha_url}' target='_blank'>planilha de clientes</a>.</p>",
     ]
 
-    # agrupa por cliente -> keyword
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        parts.append(f"<h3>{cliente}</h3>")
-        # rows: [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
-        # reagrupa por palavra
-        by_kw = {}
-        for row in rows:
-            kw = row[2] or "(sem palavra-chave)"
-            by_kw.setdefault(kw, []).append(row)
+        parts.append(f"<h2>{cliente}</h2>")
+        agrupados = {}
+        for r in rows:
+            kw = r[2]
+            agrupados.setdefault(kw, []).append(r)
 
-        for kw, itens in by_kw.items():
-            parts.append(f"<h4>Palavra-chave: {kw}</h4><ul>")
-            for r in itens:
-                link = r[4] or "#"
-                titulo = r[3] or "(sem título)"
-                resumo = r[5] or ""
-                parts.append(f"<li><a href='{link}'>{titulo}</a><br><em>Resumo: {resumo}</em></li>")
+        for kw, lista in agrupados.items():
+            parts.append(f"<h3>Palavra-chave: {kw}</h3><ul>")
+            for item in lista:
+                link = item[4]
+                titulo_item = item[3] or "(sem título)"
+                resumo = item[5] or ""
+                parts.append(f"<li><a href='{link}'>{titulo_item}</a><br>Resumo: {resumo}</li>")
             parts.append("</ul>")
 
-    parts.append(
-        f'<p>📊 Veja a <a href="{planilha_clientes_url}" target="_blank">planilha por cliente</a> para o conteúdo completo.</p>'
-    )
     parts.append("</body></html>")
     html = "".join(parts)
 
-    cfg = Configuration(); cfg.api_key['api-key'] = api_key
-    api = TransactionalEmailsApi(ApiClient(configuration=cfg))
     for dest in destinatarios:
         try:
-            api.send_transac_email(SendSmtpEmail(
-                to=[{"email": dest}],
-                sender={"email": sender_email},
-                subject=titulo,
-                html_content=html
-            ))
+            api.send_transac_email(
+                SendSmtpEmail(
+                    to=[{"email": dest}],
+                    sender={"email": sender_email},
+                    subject=titulo,
+                    html_content=html,
+                )
+            )
             print(f"✅ E-mail (clientes) enviado para {dest}")
         except (ApiException, Exception) as e:
             print(f"❌ Falha ao enviar (clientes) para {dest}: {e}")
@@ -598,10 +552,9 @@ if __name__ == "__main__":
     # 1) Planilha geral
     geral = procura_termos(conteudo)
     salva_na_base(geral)
-    envia_email_brevo(geral)  # e-mail só do geral
+    envia_email_geral(geral)
 
     # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
-    # e-mail por cliente (apenas se houver itens)
-    envia_email_brevo_clientes(por_cliente)
+    envia_email_clientes(por_cliente)
