@@ -10,7 +10,8 @@ Observação:
 - A coluna "Conteúdo" SEMPRE é preenchida automaticamente com o texto da página do DOU.
 - Limite padrão de caracteres = 3000 (mude com env DOU_CONTEUDO_MAX).
 
-Este arquivo inclui bloqueio de menções ao Conselho Regional de Educação Física (CREF/CONFEF).
+Este arquivo inclui bloqueio de menções ao Conselho Regional de Educação Física (CREF/CONFEF)
+e envio de e-mail agrupado por cliente/palavra-chave.
 """
 
 import os, re, json, unicodedata, requests, gspread
@@ -18,7 +19,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 
-# ======= E-mail (Brevo) – usado apenas para o "geral" =======
+# ======= E-mail (Brevo) =======
 from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
@@ -95,7 +96,6 @@ def _baixar_conteudo_pagina(url: str) -> str:
             ps = []
             for p in bloco.find_all(["p", "li"]):
                 cls = set(p.get("class") or [])
-                # classes comuns no DOU:
                 if {"dou-paragraph", "identifica", "ementa"} & cls or p.name == "li":
                     txt = p.get_text(" ", strip=True)
                     if txt:
@@ -443,7 +443,7 @@ def salva_por_cliente(por_cliente: dict):
         _append_dedupe_por_cliente(sh, cli, rows)
 
 # ============================================================
-# E-mail (Brevo) — somente GERAL
+# E-mail (Brevo) — GERAL (já existente)
 # ============================================================
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
 
@@ -513,6 +513,83 @@ def envia_email_brevo(palavras_raspadas):
             print(f"❌ Falha ao enviar para {dest}: {e}")
 
 # ============================================================
+# E-mail (Brevo) — POR CLIENTE (NOVO)
+# ============================================================
+def envia_email_brevo_clientes(por_cliente: dict):
+    """
+    Envia e-mail agrupado por Cliente -> Palavra-chave -> Itens.
+    Usa DESTINATARIOS_CLIENTES (se existir) ou fallback para DESTINATARIOS.
+    """
+    # checa se há algum conteúdo
+    has_any = any(por_cliente.get(cli) for cli in por_cliente or {})
+    if not has_any:
+        print("Sem itens por cliente para enviar.")
+        return
+
+    api_key = os.getenv('BREVO_API_KEY')
+    sender_email = os.getenv('EMAIL')
+    raw_dest = os.getenv('DESTINATARIOS_CLIENTES') or os.getenv('DESTINATARIOS', '')
+    if not (api_key and sender_email and raw_dest):
+        print("Dados de e-mail (clientes) incompletos; pulando envio.")
+        return
+
+    destinatarios = _sanitize_emails(raw_dest)
+    data = datetime.now().strftime('%d-%m-%Y')
+    titulo = f'DOU – Clientes – {data}'
+
+    # link da planilha por clientes
+    planilha_clientes_id = os.getenv("PLANILHA_CLIENTES")
+    planilha_clientes_url = f'https://docs.google.com/spreadsheets/d/{planilha_clientes_id}/edit' if planilha_clientes_id else "#"
+
+    # monta HTML agrupado
+    parts = [
+        "<html><body>",
+        f"<h2>Resultados do Diário Oficial – {data}</h2>",
+        "<p>As ocorrências já foram registradas por cliente. Seguem os destaques:</p>"
+    ]
+
+    # agrupa por cliente -> keyword
+    for cliente, rows in (por_cliente or {}).items():
+        if not rows:
+            continue
+        parts.append(f"<h3>{cliente}</h3>")
+        # rows: [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
+        # reagrupa por palavra
+        by_kw = {}
+        for row in rows:
+            kw = row[2] or "(sem palavra-chave)"
+            by_kw.setdefault(kw, []).append(row)
+
+        for kw, itens in by_kw.items():
+            parts.append(f"<h4>Palavra-chave: {kw}</h4><ul>")
+            for r in itens:
+                link = r[4] or "#"
+                titulo = r[3] or "(sem título)"
+                resumo = r[5] or ""
+                parts.append(f"<li><a href='{link}'>{titulo}</a><br><em>Resumo: {resumo}</em></li>")
+            parts.append("</ul>")
+
+    parts.append(
+        f'<p>📊 Veja a <a href="{planilha_clientes_url}" target="_blank">planilha por cliente</a> para o conteúdo completo.</p>'
+    )
+    parts.append("</body></html>")
+    html = "".join(parts)
+
+    cfg = Configuration(); cfg.api_key['api-key'] = api_key
+    api = TransactionalEmailsApi(ApiClient(configuration=cfg))
+    for dest in destinatarios:
+        try:
+            api.send_transac_email(SendSmtpEmail(
+                to=[{"email": dest}],
+                sender={"email": sender_email},
+                subject=titulo,
+                html_content=html
+            ))
+            print(f"✅ E-mail (clientes) enviado para {dest}")
+        except (ApiException, Exception) as e:
+            print(f"❌ Falha ao enviar (clientes) para {dest}: {e}")
+
+# ============================================================
 # Execução principal
 # ============================================================
 if __name__ == "__main__":
@@ -526,3 +603,5 @@ if __name__ == "__main__":
     # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
+    # e-mail por cliente (apenas se houver itens)
+    envia_email_brevo_clientes(por_cliente)
