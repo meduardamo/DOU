@@ -487,7 +487,7 @@ def envia_email_brevo_extra(palavras_raspadas, total_clientes, total_geral):
 
     destinatarios = _sanitize_emails(raw_dest)
     data = datetime.now().strftime('%d-%m-%Y')
-    titulo = f'[DOU EXTRA] Itens do dia {data}'
+    titulo = f'Resultados do Diário Oficial (EXTRA) — {data}'
     planilha_url = f'https://docs.google.com/spreadsheets/d/{os.getenv("PLANILHA")}/edit?gid=0'
 
     parts = [
