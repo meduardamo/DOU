@@ -485,10 +485,13 @@ def envia_email_geral(palavras_raspadas):
             print(f"❌ Falha ao enviar (geral) para {dest}: {e}")
 
 def envia_email_clientes(por_cliente: dict):
-    """E-mail com resultados organizados por cliente, assunto padronizado e link da planilha."""
+    """E-mail com resultados organizados por cliente + SUMÁRIO por cliente."""
     if not por_cliente:
         print("Sem resultados para enviar (clientes).")
         return
+
+    from collections import Counter
+
     sender_email = os.getenv("EMAIL")
     raw_dest = os.getenv("DESTINATARIOS", "")
     planilha_id_clientes = os.getenv("PLANILHA_CLIENTES")
@@ -497,10 +500,26 @@ def envia_email_clientes(por_cliente: dict):
         print("Dados de e-mail incompletos; pulando envio (clientes).")
         return
 
+    def _slug(s: str) -> str:
+        return re.sub(r'[^a-z0-9]+', '-', _normalize_ws(s)).strip('-') or "secao"
+
     destinatarios = _sanitize_emails(raw_dest)
     data = datetime.now().strftime("%d-%m-%Y")
     titulo = f"Resultados do Diário Oficial (Clientes) – {data}"
     planilha_url = f"https://docs.google.com/spreadsheets/d/{planilha_id_clientes}/edit?gid=0"
+
+    # ---------- SUMÁRIO por cliente ----------
+    # Monta linhas com: Cliente | Total | Top KWs
+    sum_rows = []
+    for cliente, rows in (por_cliente or {}).items():
+        if not rows:
+            continue
+        kw_counts = Counter(r[2] for r in rows)
+        top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
+        sum_rows.append((cliente, len(rows), top_kw))
+
+    # Ordena por maior número de ocorrências
+    sum_rows.sort(key=lambda t: t[1], reverse=True)
 
     parts = [
         "<html><body>",
@@ -508,22 +527,47 @@ def envia_email_clientes(por_cliente: dict):
         f"<p>Os resultados já estão na <a href='{planilha_url}' target='_blank'>planilha de clientes</a>.</p>",
     ]
 
+    if sum_rows:
+        parts.append("<h2>Sumário por cliente</h2>")
+        parts.append("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse'>")
+        parts.append("<tr><th>Cliente</th><th>Total</th><th>Top palavras-chave</th></tr>")
+        for cliente, total, top_kw in sum_rows:
+            anchor = _slug(cliente)
+            parts.append(
+                f"<tr>"
+                f"<td><a href='#{anchor}'>{cliente}</a></td>"
+                f"<td>{total}</td>"
+                f"<td>{top_kw or '-'}</td>"
+                f"</tr>"
+            )
+        parts.append("</table>")
+
+    # ---------- Detalhes por cliente ----------
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        parts.append(f"<h2>{cliente}</h2>")
+        anchor = _slug(cliente)
+        parts.append(f"<h2 id='{anchor}'>{cliente}</h2>")
+
+        # agrupa por palavra-chave
         agrupados = {}
         for r in rows:
             kw = r[2]
             agrupados.setdefault(kw, []).append(r)
 
-        for kw, lista in agrupados.items():
-            parts.append(f"<h3>Palavra-chave: {kw}</h3><ul>")
+        # ordena grupos por quantidade desc
+        for kw, lista in sorted(agrupados.items(), key=lambda kv: len(kv[1]), reverse=True):
+            parts.append(f"<h3>Palavra-chave: {kw} — {len(lista)} ocorrência(s)</h3><ul>")
             for item in lista:
+                # item = [data_pub, cliente, kw, titulo, link, resumo, conteudo]
                 link = item[4]
                 titulo_item = item[3] or "(sem título)"
-                resumo = item[5] or ""
-                parts.append(f"<li><a href='{link}'>{titulo_item}</a><br>Resumo: {resumo}</li>")
+                resumo = (item[5] or "").strip()
+                parts.append(
+                    f"<li><a href='{link}' target='_blank'>{titulo_item}</a>"
+                    + (f"<br><em>Resumo:</em> {resumo}" if resumo else "")
+                    + "</li>"
+                )
             parts.append("</ul>")
 
     parts.append("</body></html>")
@@ -558,3 +602,4 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
