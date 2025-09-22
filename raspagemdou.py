@@ -10,6 +10,7 @@ Observação:
 - A coluna "Conteúdo" SEMPRE é preenchida automaticamente com o texto da página do DOU.
 - Limite padrão de caracteres = 3000 (mude com env DOU_CONTEUDO_MAX).
 - Inclui bloqueio de menções ao Conselho Regional/Federal de Educação Física (CREF/CONFEF).
+- NOVO: corte de decisões do CNE que tratem da Câmara de Educação Superior (CES) — coocorrência CNE+CES.
 """
 
 import os, re, json, unicodedata, requests, gspread
@@ -43,7 +44,7 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
 # ============================================================
-# BLOQUEIO DE MENÇÕES (CREF/CONFEF)
+# BLOQUEIO DE MENÇÕES (CREF/CONFEF) + CNE/CES
 # ============================================================
 EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Regional de Educação Física"),
@@ -54,13 +55,37 @@ EXCLUDE_PATTERNS = [
     re.compile(r"\bCONFEF\b", re.I),
 ]
 
+# CNE
+_CNE_PATTERNS = [
+    _wholeword_pattern("Conselho Nacional de Educação"),
+    _wholeword_pattern("Conselho Nacional de Educacao"),
+    re.compile(r"\bCNE\b", re.I),
+]
+# CES (Câmara de Educação Superior) — só bloqueia se houver coocorrência com CNE
+_CES_PATTERNS = [
+    _wholeword_pattern("Câmara de Educação Superior"),
+    _wholeword_pattern("Camara de Educacao Superior"),
+    re.compile(r"\bCES\b", re.I),
+]
+
+def _has_any(text_norm: str, patterns: list[re.Pattern]) -> bool:
+    return any(p and p.search(text_norm) for p in patterns)
+
 def _is_blocked(text: str) -> bool:
+    """Retorna True se o texto contiver menções bloqueadas."""
     if not text:
         return False
     nt = _normalize_ws(text)
+
+    # 1) bloqueios diretos (CREF/CONFEF)
     for pat in EXCLUDE_PATTERNS:
         if pat and pat.search(nt):
             return True
+
+    # 2) decisões do CNE que tratem da CES (coocorrência)
+    if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
+        return True
+
     return False
 
 # ============================================================
@@ -369,6 +394,7 @@ def salva_na_base(palavras_raspadas):
     else:
         print('Nenhum dado válido para salvar (geral).')
 
+# ---- Por cliente (dedupe por Link+Palavra-chave+Cliente)
 def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if not rows:
         print(f"[{sheet_name}] sem linhas para anexar.")
@@ -509,16 +535,14 @@ def envia_email_clientes(por_cliente: dict):
     planilha_url = f"https://docs.google.com/spreadsheets/d/{planilha_id_clientes}/edit?gid=0"
 
     # ---------- SUMÁRIO por cliente ----------
-    # Monta linhas com: Cliente | Total | Top KWs
     sum_rows = []
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
+        from collections import Counter
         kw_counts = Counter(r[2] for r in rows)
         top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
         sum_rows.append((cliente, len(rows), top_kw))
-
-    # Ordena por maior número de ocorrências
     sum_rows.sort(key=lambda t: t[1], reverse=True)
 
     parts = [
@@ -526,7 +550,6 @@ def envia_email_clientes(por_cliente: dict):
         "<h1>Consulta ao Diário Oficial da União (Clientes)</h1>",
         f"<p>Os resultados já estão na <a href='{planilha_url}' target='_blank'>planilha de clientes</a>.</p>",
     ]
-
     if sum_rows:
         parts.append("<h2>Sumário por cliente</h2>")
         parts.append("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse'>")
@@ -534,32 +557,21 @@ def envia_email_clientes(por_cliente: dict):
         for cliente, total, top_kw in sum_rows:
             anchor = _slug(cliente)
             parts.append(
-                f"<tr>"
-                f"<td><a href='#{anchor}'>{cliente}</a></td>"
-                f"<td>{total}</td>"
-                f"<td>{top_kw or '-'}</td>"
-                f"</tr>"
+                f"<tr><td><a href='#{anchor}'>{cliente}</a></td><td>{total}</td><td>{top_kw or '-'}</td></tr>"
             )
         parts.append("</table>")
-
-    # ---------- Detalhes por cliente ----------
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
         anchor = _slug(cliente)
         parts.append(f"<h2 id='{anchor}'>{cliente}</h2>")
-
-        # agrupa por palavra-chave
         agrupados = {}
         for r in rows:
             kw = r[2]
             agrupados.setdefault(kw, []).append(r)
-
-        # ordena grupos por quantidade desc
         for kw, lista in sorted(agrupados.items(), key=lambda kv: len(kv[1]), reverse=True):
             parts.append(f"<h3>Palavra-chave: {kw} — {len(lista)} ocorrência(s)</h3><ul>")
             for item in lista:
-                # item = [data_pub, cliente, kw, titulo, link, resumo, conteudo]
                 link = item[4]
                 titulo_item = item[3] or "(sem título)"
                 resumo = (item[5] or "").strip()
@@ -569,7 +581,6 @@ def envia_email_clientes(por_cliente: dict):
                     + "</li>"
                 )
             parts.append("</ul>")
-
     parts.append("</body></html>")
     html = "".join(parts)
 
@@ -602,4 +613,3 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
