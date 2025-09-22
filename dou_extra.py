@@ -8,13 +8,8 @@ DOU EXTRA – raspagem recorrente da edição extra (DO1E/DO2E/DO3E) com duas sa
 
 Extras:
 - Envia e-mail **apenas se** houver resultados (assunto com prefixo [DOU EXTRA]).
-- Ignora itens que mencionem o Conselho Regional de Educação Física (CREF).
 - Usa as MESMAS planilhas do fluxo diário (variáveis PLANILHA e PLANILHA_CLIENTES).
-
-Ambiente necessário:
-- GOOGLE_APPLICATION_CREDENTIALS_JSON (ou credentials.json no diretório)
-- PLANILHA, PLANILHA_CLIENTES
-- EMAIL, DESTINATARIOS, BREVO_API_KEY (para envio)
+- NOVO: mesmo bloqueio do script diário (CREF/CONFEF + coocorrência CNE+CES).
 """
 
 import os, re, json, unicodedata, requests, gspread
@@ -48,16 +43,46 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
 # ============================================================
-# Exclusões (CREF)
+# BLOQUEIO DE MENÇÕES (CREF/CONFEF) + CNE/CES
 # ============================================================
-# Match feito sobre texto normalizado (sem acentos).
-_EXCLUDE_PATTERNS = [
-    re.compile(r'\bconselho\s+regional\s+de\s+educacao\s+fisica\b'),
-    re.compile(r'\bcref(?:\s*\d+)?\b'),
+EXCLUDE_PATTERNS = [
+    _wholeword_pattern("Conselho Regional de Educação Física"),
+    _wholeword_pattern("Conselho Federal de Educação Física"),
+    _wholeword_pattern("Conselho Regional de Educacao Fisica"),
+    _wholeword_pattern("Conselho Federal de Educacao Fisica"),
+    re.compile(r"\bCREF\b", re.I),
+    re.compile(r"\bCONFEF\b", re.I),
 ]
-def _is_excluded(*texts: str) -> bool:
-    norm = " ".join(_normalize(t or "") for t in texts)
-    return any(p.search(norm) for p in _EXCLUDE_PATTERNS)
+
+_CNE_PATTERNS = [
+    _wholeword_pattern("Conselho Nacional de Educação"),
+    _wholeword_pattern("Conselho Nacional de Educacao"),
+    re.compile(r"\bCNE\b", re.I),
+]
+
+_CES_PATTERNS = [
+    _wholeword_pattern("Câmara de Educação Superior"),
+    _wholeword_pattern("Camara de Educacao Superior"),
+    re.compile(r"\bCES\b", re.I),
+]
+
+def _has_any(text_norm: str, patterns: list[re.Pattern]) -> bool:
+    return any(p and p.search(text_norm) for p in patterns)
+
+def _is_blocked(text: str) -> bool:
+    """True se o texto contiver menções bloqueadas."""
+    if not text:
+        return False
+    nt = _normalize_ws(text)
+
+    for pat in EXCLUDE_PATTERNS:
+        if pat and pat.search(nt):
+            return True
+
+    if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
+        return True
+
+    return False
 
 # ============================================================
 # Coleta do conteúdo completo da página do DOU (sempre ligada)
@@ -109,10 +134,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
             if not el:
                 continue
             ps = [p.get_text(" ", strip=True) for p in el.find_all(["p", "li"]) if p.get_text(strip=True)]
-            if len(ps) >= 2:
-                textos.append("\n\n".join(ps))
-            else:
-                textos.append(el.get_text(" ", strip=True))
+            textos.append("\n\n".join(ps) if len(ps) >= 2 else el.get_text(" ", strip=True))
 
         txt = max(textos, key=len) if textos else soup.get_text(" ", strip=True)
         txt = re.sub(r"[ \t]+", " ", txt).strip()
@@ -163,7 +185,6 @@ def raspa_dou_extra(data=None, secoes=None):
 
 # ============================================================
 # Palavras gerais (planilha geral)
-# (mesmo conjunto do script diário)
 # ============================================================
 PALAVRAS_GERAIS = [
     'Infância','Criança','Infantil','Infâncias','Crianças',
@@ -182,7 +203,7 @@ PALAVRAS_GERAIS = [
     'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
     'Exposição a Fatores de Risco','Departamento de Saúde Mental',
     'Hipertensão Arterial','Alimentação Escolar','PNAE','Agora Tem Especialistas',
-    # Alfabetização
+    # Alfabetização e matemática
     'Alfabetização','Alfabetização na Idade Certa','Criança Alfabetizada','Meta de Alfabetização',
     'Plano Nacional de Alfabetização','Programa Criança Alfabetizada','Idade Certa para Alfabetização',
     'Alfabetização de Crianças','Alfabetização Inicial','Alfabetização Plena',
@@ -190,7 +211,6 @@ PALAVRAS_GERAIS = [
     'Programa Nacional de Alfabetização na Idade Certa','Pacto pela Alfabetização',
     'Política Nacional de Alfabetização','Recomposição das Aprendizagens em Alfabetização',
     'Competências de Alfabetização','Avaliação da Alfabetização','Saeb Alfabetização',
-    # Matemática
     'Alfabetização Matemática','Analfabetismo Matemático','Aprendizagem em Matemática',
     'Recomposição das Aprendizagens em Matemática','Recomposição de Aprendizagem',
     'Competências Matemáticas','Proficiência em Matemática',
@@ -205,7 +225,7 @@ _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 def procura_termos(conteudo_raspado):
     """
     Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
-    (com filtro de exclusão CREF)
+    (com bloqueio CREF/CONFEF e CNE+CES)
     """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (geral extra).')
@@ -222,8 +242,7 @@ def procura_termos(conteudo_raspado):
         link     = URL_BASE + resultado.get('urlTitle', '')
         data_pub = (resultado.get('pubDate', '') or '')[:10]
 
-        # filtro de exclusão (título+resumo)
-        if _is_excluded(titulo, resumo):
+        if _is_blocked(titulo + " " + resumo):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
@@ -233,10 +252,8 @@ def procura_termos(conteudo_raspado):
             if patt and patt.search(texto_norm):
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
-                    # filtro de exclusão também no conteúdo completo
-                    if _is_excluded(conteudo_pagina):
-                        conteudo_pagina = None
-                        break
+                if _is_blocked(conteudo_pagina):
+                    continue
                 resultados_por_palavra[palavra].append({
                     'date': data_pub,
                     'title': titulo,
@@ -254,7 +271,6 @@ def procura_termos(conteudo_raspado):
 
 # ============================================================
 # Cliente → Palavras (whole-word)
-# (mesmo conjunto do script diário)
 # ============================================================
 CLIENT_THEME_DATA = """
 IAS|Educação|Matemática; Alfabetização; Alfabetização Matemática; Recomposição de aprendizagem; Plano Nacional de Educação
@@ -265,7 +281,7 @@ REMS|Esportes|Esporte amador; Esporte para toda a vida; Esporte e desenvolviment
 FMCSV|Primeira infância|Criança; Infância; infanto-juvenil; educação básica; PNE; FNDE; Fundeb; VAAR; VAAT; educação infantil; maternidade; paternidade; alfabetização; creche; pré-escola; parentalidade; materno-infantil; infraestrutura escolar; política nacional de cuidados; Plano Nacional de Educação; Bolsa Família; Conanda; visitação domiciliar; Homeschooling; Política Nacional Integrada da Primeira Infância
 IEPS|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; Ministério da Saúde; Trabalhadores de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Formação profissional de saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças climáticas; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; complementar; privada; planos de saúde; seguros; seguradoras; planos populares; Anvisa; gestão; governança; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Economia solidária em saúde mental; Pessoa em situação de rua; saúde mental; Fiscalização de comunidades terapêuticas; Rede de atenção psicossocial; RAPS; unidades de acolhimento; assistência multiprofissional; centros de convivência; Cannabis; canabidiol; tratamento terapêutico; Desinstitucionalização; manicômios; hospitais de custódia; Saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; Dependência química; vícios; ludopatia; Treinamento em saúde mental; capacitação em saúde mental; Intervenções terapêuticas em saúde mental; Internet e redes sociais na saúde mental; Violência psicológica; Surto psicótico
 Manual|Saúde|Ozempic; Wegovy; Mounjaro; Telemedicina; Telessaúde; CBD; Cannabis Medicinal; CFM; Conselho Federal de Medicina; Farmácia Magistral; Medicamentos Manipulados; Minoxidil; Emagrecedores; Retenção de receita de medicamentos
-Mevo|Saúde|Prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; autonomia da ANPD; Acesso e uso de dados; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do SUS; venda de medicamentos; distribuição de medicamentos; Bula digital; Atesta CFM; SNGPC; Farmacêutico Remoto; Medicamentos Isentos de Prescrição; MIPs; RNDS; Rede Nacional de Dados em Saúde
+Mevo|Saúde|Prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; autonomia da ANPD; Acesso e uso de dados; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do SUS; venda de medicamentos; distribuição de medicamentos; Bula digital; Atesta CFM; SNGPC; Farmacêutico Remoto; MIPs; RNDS; Rede Nacional de Dados em Saúde
 Giro de notícias|Temas gerais para o Giro de Notícias e clipping cactus|Governo Lula; Presidente Lula; Governo; Governo Federal; Governo economia; Economia; Governo internacional; Saúde; Medicamento; Vacina; Câncer; Oncologia; Gripe; Diabetes; Obesidade; Alzheimer; Saúde mental; Síndrome respiratória; SUS; Sistema Único de Saúde; Ministério da Saúde; Alexandre Padilha; ANVISA; Primeira Infância; Infância; Criança; Saúde criança; Saúde infantil; cuidado criança; legislação criança; direitos da criança; criança câmara; criança senado; alfabetização; creche; ministério da educação; educação; educação Brasil; escolas; aprendizado; ensino integral; ensino médio; Camilo Santana
 Cactus|Saúde|Saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; Rede de atenção psicossocial; RAPS; CAPS; Centro de Apoio Psicossocial
 Vital Strategies|Saúde|Saúde mental; Dados para a saúde; Morte evitável; Doenças crônicas não transmissíveis; Rotulagem de bebidas alcoólicas; Educação em saúde; Bebidas alcoólicas; Imposto seletivo; Rotulagem de alimentos; Alimentos ultraprocessados; Publicidade infantil; Publicidade de alimentos ultraprocessados; Tributação de bebidas alcoólicas; Alíquota de bebidas alcoólicas; Cigarro eletrônico; Controle de tabaco; Violência doméstica; Exposição a fatores de risco; Departamento de Saúde Mental; Hipertensão arterial; Saúde digital; Violência contra crianças; Violência contra mulheres; Feminicídio; COP 30
@@ -297,7 +313,7 @@ def procura_termos_clientes(conteudo_raspado):
     """
     Retorna dict cliente -> [rows] onde cada row é:
     [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
-    (uma linha por palavra-chave encontrada por cliente, com filtro CREF)
+    (com bloqueio CREF/CONFEF e CNE+CES)
     """
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (clientes extra).')
@@ -313,8 +329,7 @@ def procura_termos_clientes(conteudo_raspado):
         link     = URL_BASE + r.get('urlTitle', '')
         data_pub = (r.get('pubDate', '') or '')[:10]
 
-        # filtro de exclusão (título+resumo)
-        if _is_excluded(titulo, resumo):
+        if _is_blocked(titulo + " " + resumo):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
@@ -323,10 +338,8 @@ def procura_termos_clientes(conteudo_raspado):
             if pat.search(texto_norm):
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
-                    # exclusão também no corpo
-                    if _is_excluded(conteudo_pagina):
-                        conteudo_pagina = None
-                        break
+                if _is_blocked(conteudo_pagina):
+                    continue
                 por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina or ""])
     return por_cliente
 
@@ -496,13 +509,12 @@ def envia_email_brevo_extra(palavras_raspadas, total_clientes, total_geral):
         f"<p>Foram adicionados <b>{total}</b> itens. Veja a ",
         f'<a href="{planilha_url}" target="_blank">planilha geral</a> e as abas por cliente.</p>'
     ]
-    # listagem resumida por palavra (opcional)
     shown = 0
     for palavra, lista in (palavras_raspadas or {}).items():
         if not lista:
             continue
         parts.append(f"<h3>{palavra}</h3><ul>")
-        for r in lista[:5]:  # limita por e-mail
+        for r in lista[:5]:
             link = r.get('href', '#')
             title = r.get('title', '(sem título)')
             parts.append(f"<li><a href='{link}'>{title}</a></li>")
