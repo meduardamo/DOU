@@ -6,8 +6,7 @@ urllib3>=2.2.3
 gspread>=6.1.2
 google-auth>=2.35.0
 gspread-dataframe>=3.3.1
-
-google-genai>=0.3.0
+google-generativeai>=0.3.0
 brevo-python>=1.1.0
 
 backports.zoneinfo==0.2.1 ; python_version < "3.9"
