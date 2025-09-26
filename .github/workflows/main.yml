@@ -30,7 +30,7 @@ jobs:
           import os, json, pathlib
           raw = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
           if not raw:
-            raise SystemExit("❌ Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado.")
+            raise SystemExit("⚠ Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado.")
           info = json.loads(raw)
           if "private_key" in info and "\\n" in info["private_key"]:
             info["private_key"] = info["private_key"].replace("\\n", "\n")
@@ -50,3 +50,12 @@ jobs:
           # DOU_EXTRA_SECOES: "DO1E,DO2E"
         run: |
           python dou_extra.py
+
+      # Alinhamento nas abas por cliente (usa coluna "Conteúdo"; pula "Giro de notícias")
+      - name: Run DOU alignment (per client tabs)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
+          GENAI_API_KEY: ${{ secrets.GENAI_API_KEY }}
+        run: |
+          python alinhamento_dou.py
