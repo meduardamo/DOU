@@ -1,12 +1,12 @@
-pandas>=2.2.2
-requests>=2.32.3
-beautifulsoup4>=4.12.3
-urllib3>=2.2.3
+pandas==2.2.2
+requests==2.32.3
+urllib3==2.2.3
+beautifulsoup4==4.12.3
 
-gspread>=6.1.2
-google-auth>=2.35.0
-gspread-dataframe>=3.3.1
-google-generativeai>=0.3.0
+gspread==6.1.2
+google-auth==2.35.0
+gspread-dataframe==3.3.1
+google-genai>=1.0.0,<2.0.0
 brevo-python>=1.1.0
 
 backports.zoneinfo==0.2.1 ; python_version < "3.9"
