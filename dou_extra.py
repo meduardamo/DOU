@@ -1,31 +1,15 @@
-# -*- coding: utf-8 -*-
-"""
-DOU EXTRA – raspagem recorrente da edição extra (DO1E/DO2E/DO3E) com duas saídas:
-1) Planilha geral (aba "Página1"):
-   Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
-2) Planilha por cliente (uma aba por sigla):
-   Data | Cliente | Palavra-chave | Portaria | Link | Resumo | Conteúdo
-
-Extras:
-- Envia e-mail **apenas se** houver resultados (assunto com prefixo [DOU EXTRA]).
-- Usa as MESMAS planilhas do fluxo diário (variáveis PLANILHA e PLANILHA_CLIENTES).
-- NOVO: mesmo bloqueio do script diário (CREF/CONFEF + coocorrência CNE+CES).
-"""
-
 import os, re, json, unicodedata, requests, gspread
 from bs4 import BeautifulSoup
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 
-# ======= E-mail (Brevo) – mesmo formato do diário, com assunto [DOU EXTRA] =======
+# E-mail (Brevo) – mesmo formato do diário, com assunto [DOU EXTRA]
 from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
 
-# ============================================================
 # Normalização + busca whole-word
-# ============================================================
 def _normalize(s: str) -> str:
     if s is None:
         return ""
@@ -42,9 +26,7 @@ def _wholeword_pattern(phrase: str):
         return None
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
-# ============================================================
 # BLOQUEIO DE MENÇÕES (CREF/CONFEF) + CNE/CES
-# ============================================================
 EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Regional de Educação Física"),
     _wholeword_pattern("Conselho Federal de Educação Física"),
@@ -84,9 +66,7 @@ def _is_blocked(text: str) -> bool:
 
     return False
 
-# ============================================================
 # Coleta do conteúdo completo da página do DOU (sempre ligada)
-# ============================================================
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))  # limite de caracteres
 _CONTENT_CACHE: dict[str, str] = {}
 
@@ -145,9 +125,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
     except Exception:
         return ""
 
-# ============================================================
 # Raspagem da(s) Edição(ões) Extra (DO1E/DO2E/DO3E…)
-# ============================================================
 def raspa_dou_extra(data=None, secoes=None):
     """
     Retorna a mesma estrutura (dict com jsonArray) combinando as seções extras pedidas.
@@ -183,9 +161,7 @@ def raspa_dou_extra(data=None, secoes=None):
     print("Nenhum item encontrado na(s) seção(ões) extra.")
     return None
 
-# ============================================================
 # Palavras gerais (planilha geral)
-# ============================================================
 PALAVRAS_GERAIS = [
     'Infância','Criança','Infantil','Infâncias','Crianças',
     'Educação','Ensino','Escolaridade',
@@ -269,9 +245,7 @@ def procura_termos(conteudo_raspado):
     print('Palavras-chave (geral extra) encontradas.')
     return resultados_por_palavra
 
-# ============================================================
 # Cliente → Palavras (whole-word)
-# ============================================================
 CLIENT_THEME_DATA = """
 IAS|Educação|Matemática; Alfabetização; Alfabetização Matemática; Recomposição de aprendizagem; Plano Nacional de Educação
 ISG|Educação|Tempo Integral; Ensino em tempo integral; Ensino Profissional e Tecnológico; Fundeb; PROPAG; Educação em tempo integral; Escola em tempo integral; Plano Nacional de Educação; Programa escola em tempo integral; Programa Pé-de-meia; PNEERQ; INEP; FNDE; Conselho Nacional de Educação; PDDE; Programa de Fomento às Escolas de Ensino Médio em Tempo Integral; Celular nas escolas; Juros da Educação
@@ -361,7 +335,7 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-# ---- Colunas FIXAS (Conteúdo é sempre a última)
+# Colunas FIXAS (Conteúdo é sempre a última)
 COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
 COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa"]
 
@@ -371,7 +345,7 @@ def _ensure_header(ws, header):
         ws.resize(rows=max(2, ws.row_count), cols=len(header))
         ws.update('1:1', [header])
 
-# ---- Geral
+# Geral
 def salva_na_base(palavras_raspadas):
     if not palavras_raspadas:
         print('Sem palavras encontradas para salvar (geral extra).')
@@ -410,7 +384,7 @@ def salva_na_base(palavras_raspadas):
         print('Nenhum dado válido para salvar (geral extra).')
     return len(rows_to_append)
 
-# ---- Por cliente (dedupe por Link+Palavra-chave+Cliente)
+# Por cliente (dedupe por Link+Palavra-chave+Cliente)
 def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if not rows:
         print(f"[{sheet_name}] sem linhas para anexar.")
@@ -463,9 +437,7 @@ def salva_por_cliente(por_cliente: dict):
         total_new += _append_dedupe_por_cliente(sh, cli, rows)
     return total_new
 
-# ============================================================
 # E-mail (Brevo) — só envia se houve ao menos 1 linha nova
-# ============================================================
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
 
 def _sanitize_emails(raw_list: str):
@@ -538,9 +510,7 @@ def envia_email_brevo_extra(palavras_raspadas, total_clientes, total_geral):
         except (ApiException, Exception) as e:
             print(f"❌ Falha ao enviar (extra) para {dest}: {e}")
 
-# ============================================================
 # Execução principal
-# ============================================================
 if __name__ == "__main__":
     conteudo = raspa_dou_extra()
 
