@@ -363,7 +363,7 @@ def _gs_client_from_env():
 
 # ---- Colunas FIXAS (Conteúdo é sempre a última)
 COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
-COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
+COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa"]
 
 def _ensure_header(ws, header):
     first = ws.row_values(1)
