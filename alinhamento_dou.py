@@ -1,15 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Alinhamento DOU (abas por cliente)
-- Percorre todas as abas da planilha de clientes (exceto "Giro de notícias")
-- Usa a COLUNA "Conteúdo" como fonte da análise (fallback: Resumo → Portaria)
-- Escreve: Alinhamento | Justificativa
-Requer:
-  - GENAI_API_KEY
-  - PLANILHA_CLIENTES  (apenas a key entre /d/ e /edit)
-  - GOOGLE_APPLICATION_CREDENTIALS_JSON (ou arquivo credentials.json)
-"""
-
 import os, re, json, time, random
 import pandas as pd
 import gspread
@@ -18,7 +6,7 @@ from google.oauth2.service_account import Credentials
 from google import genai
 from string import Template
 
-# =================== CONFIG ===================
+# CONFIG
 GENAI_API_KEY   = os.getenv("GENAI_API_KEY", "")
 MODEL_NAME      = "gemini-2.5-flash"
 PLANILHA_CLIENTES = os.getenv("PLANILHA_CLIENTES")  # só a key
@@ -38,7 +26,7 @@ COL_JUST     = "Justificativa"
 BATCH_SIZE = int(os.getenv("ALIGN_BATCH", "25"))
 SLEEP_SEC  = float(os.getenv("ALIGN_SLEEP", "0.10"))
 
-# =================== DESCRIÇÕES DOS CLIENTES ===================
+# DESCRIÇÕES DOS CLIENTES
 CLIENTE_DESCRICOES = {
     "IU": "O Instituto Unibanco (IU) é uma organização sem fins lucrativos que apoia redes estaduais de ensino na melhoria da gestão educacional por meio de projetos como o Jovem de Futuro, produção de conhecimento e apoio técnico a secretarias de educação.",
     "FMCSV": "A Fundação Maria Cecilia Souto Vidigal (FMCSV) atua pela causa da primeira infância no Brasil, conectando pesquisa, advocacy e apoio a políticas públicas para garantir o desenvolvimento integral de crianças de 0 a 6 anos; iniciativas como o “Primeira Infância Primeiro” oferecem dados e ferramentas para gestores e candidatos.",
@@ -55,7 +43,7 @@ CLIENTE_DESCRICOES = {
 # alias sem acento, caso a aba venha como "Reuna"
 CLIENTE_DESCRICOES.setdefault("Reuna", CLIENTE_DESCRICOES["Reúna"])
 
-# =================== PROMPT ===================
+# PROMPT
 PROMPT = Template("""
 Você é analista de políticas públicas. Avalie a coerência do texto abaixo com a missão do(a) $cliente.
 
@@ -80,7 +68,7 @@ Conteúdo:
 \"\"\"$conteudo\"\"\"
 """.strip())
 
-# =================== CLIENTES / SHEETS ===================
+# CLIENTES / SHEETS
 def _gs_client():
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if raw:
