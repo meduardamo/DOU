@@ -480,9 +480,9 @@ def envia_email_geral(palavras_raspadas):
             print(f"❌ Falha ao enviar (geral) para {dest}: {e}")
 
 def envia_email_clientes(por_cliente: dict):
-    """E-mail com resultados organizados por cliente + SUMÁRIO por cliente."""
-    if not por_cliente:
-        print("Sem resultados para enviar (clientes).")
+    # não enviar e-mail se não houver nenhuma ocorrência, igual ao "geral"
+    if not por_cliente or all(not (rows) for rows in por_cliente.values()):
+        print("Sem resultados para enviar (clientes) — nenhuma ocorrência encontrada.")
         return
 
     from collections import Counter
@@ -503,12 +503,10 @@ def envia_email_clientes(por_cliente: dict):
     titulo = f"Resultados do Diário Oficial (Clientes) – {data}"
     planilha_url = f"https://docs.google.com/spreadsheets/d/{planilha_id_clientes}/edit?gid=0"
 
-    # SUMÁRIO por cliente
     sum_rows = []
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        from collections import Counter
         kw_counts = Counter(r[2] for r in rows)
         top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
         sum_rows.append((cliente, len(rows), top_kw))
@@ -519,16 +517,16 @@ def envia_email_clientes(por_cliente: dict):
         "<h1>Consulta ao Diário Oficial da União (Clientes)</h1>",
         f"<p>Os resultados já estão na <a href='{planilha_url}' target='_blank'>planilha de clientes</a>.</p>",
     ]
+
     if sum_rows:
         parts.append("<h2>Sumário por cliente</h2>")
         parts.append("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse'>")
         parts.append("<tr><th>Cliente</th><th>Total</th><th>Top palavras-chave</th></tr>")
-        for cliente, total, top_kw in sum_rows:
+        for cliente, total_cli, top_kw in sum_rows:
             anchor = _slug(cliente)
-            parts.append(
-                f"<tr><td><a href='#{anchor}'>{cliente}</a></td><td>{total}</td><td>{top_kw or '-'}</td></tr>"
-            )
+            parts.append(f"<tr><td><a href='#{anchor}'>{cliente}</a></td><td>{total_cli}</td><td>{top_kw or '-'}</td></tr>")
         parts.append("</table>")
+
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
@@ -550,6 +548,7 @@ def envia_email_clientes(por_cliente: dict):
                     + "</li>"
                 )
             parts.append("</ul>")
+
     parts.append("</body></html>")
     html = "".join(parts)
 
@@ -580,3 +579,4 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
