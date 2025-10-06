@@ -9,6 +9,7 @@ from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
 
+
 # Normalização + busca whole-word
 def _normalize(s: str) -> str:
     if s is None:
@@ -26,6 +27,7 @@ def _wholeword_pattern(phrase: str):
         return None
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
+
 # BLOQUEIO DE MENÇÕES (CREF/CONFEF) + CNE/CES
 EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Regional de Educação Física"),
@@ -42,6 +44,7 @@ _CNE_PATTERNS = [
     _wholeword_pattern("Conselho Nacional de Educacao"),
     re.compile(r"\bCNE\b", re.I),
 ]
+
 # CES (Câmara de Educação Superior) — só bloqueia se houver coocorrência com CNE
 _CES_PATTERNS = [
     _wholeword_pattern("Câmara de Educação Superior"),
@@ -53,7 +56,7 @@ def _has_any(text_norm: str, patterns: list[re.Pattern]) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 def _is_blocked(text: str) -> bool:
-    """Retorna True se o texto contiver menções bloqueadas."""
+    # Retorna True se o texto contiver menções bloqueadas
     if not text:
         return False
     nt = _normalize_ws(text)
@@ -68,6 +71,45 @@ def _is_blocked(text: str) -> bool:
         return True
 
     return False
+
+
+# Filtro específico para "Bebidas Alcoólicas": corta atos/portarias de registro/autorização,
+# mas mantém políticas públicas e regulação ampla.
+_BEBIDAS_EXCLUDE_TERMS = [
+    "ato declaratorio executivo",
+    "registro especial",
+    "declara a inscricao", "concede o registro",
+    "drf", "srrf", "defis", "efi2vit", "regesp",
+    "delegacia da receita federal",
+    "cnpj", "ncm", "mapa",
+    "engarrafador", "produtor", "importador",
+    "marcas comerciais", "atualiza as marcas"
+]
+
+_BEBIDAS_WHITELIST_TERMS = [
+    "lei", "decreto", "projeto de lei",
+    "consulta publica", "audiencia publica",
+    "campanha", "advertencia",
+    "rotulagem", "publicidade", "propaganda",
+    "tributacao", "aliquota",
+    "saude publica",
+    "controle de consumo", "controle de oferta",
+    "pontos de venda",
+    "seguranca viaria", "alcool e direcao",
+    "monitoramento"
+]
+
+def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
+    # normaliza para busca robusta
+    nt = _normalize_ws(texto_bruto)
+    # whitelist prioriza manter políticas/regulação
+    if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
+        return False
+    # termos fortes de ato cadastral/registro
+    if any(t in nt for t in _BEBIDAS_EXCLUDE_TERMS):
+        return True
+    return False
+
 
 # Coleta do conteúdo completo da página do DOU
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))  # limite de caracteres
@@ -133,6 +175,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
     except Exception:
         return ""
 
+
 # Raspagem do DOU (capa do dia)
 def raspa_dou(data=None):
     if data is None:
@@ -155,6 +198,7 @@ def raspa_dou(data=None):
     except json.JSONDecodeError as e:
         print(f"Erro ao decodificar JSON: {e}")
         return None
+
 
 # Palavras gerais (planilha geral)
 PALAVRAS_GERAIS = [
@@ -194,6 +238,7 @@ PALAVRAS_GERAIS = [
 ]
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
+
 def procura_termos(conteudo_raspado):
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (geral).')
@@ -218,6 +263,15 @@ def procura_termos(conteudo_raspado):
 
         for palavra, patt in _PATTERNS_GERAL:
             if patt and patt.search(texto_norm):
+
+                # filtro novo para "Bebidas Alcoólicas"
+                if palavra.strip().lower() == "bebidas alcoólicas":
+                    if conteudo_pagina is None:
+                        conteudo_pagina = _baixar_conteudo_pagina(link)
+                    alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                    if _is_bebidas_ato_irrelevante(alltxt):
+                        continue
+
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_blocked(conteudo_pagina):
@@ -237,6 +291,7 @@ def procura_termos(conteudo_raspado):
     print('Palavras-chave (geral) encontradas.')
     return resultados_por_palavra
 
+
 # Mapa: Cliente → Tema → Keywords (whole-word)
 CLIENT_THEME_DATA = """
 IAS|Educação|Matemática; Alfabetização; Alfabetização Matemática; Recomposição de aprendizagem; Plano Nacional de Educação
@@ -245,11 +300,11 @@ IU|Educação|Gestão Educacional; Diretores escolares; Magistério; Professores
 Reúna|Educação|Matemática; Alfabetização; Alfabetização Matemática; Recomposição de aprendizagem; Plano Nacional de Educação; Emendas parlamentares educação
 REMS|Esportes|Esporte amador; Esporte para toda a vida; Esporte e desenvolvimento social; Financiamento do esporte; Lei de Incentivo ao Esporte; Plano Nacional de Esporte; Conselho Nacional de Esporte; Emendas parlamentares esporte
 FMCSV|Primeira infância|Criança; Infância; infanto-juvenil; educação básica; PNE; FNDE; Fundeb; VAAR; VAAT; educação infantil; maternidade; paternidade; alfabetização; creche; pré-escola; parentalidade; materno-infantil; infraestrutura escolar; política nacional de cuidados; Plano Nacional de Educação; Bolsa Família; Conanda; visitação domiciliar; Homeschooling; Política Nacional Integrada da Primeira Infância
-IEPS|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; Ministério da Saúde; Trabalhadores de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Formação profissional de saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças climáticas; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; complementar; privada; planos de saúde; seguros; seguradoras; planos populares; Anvisa; gestão; governança; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Economia solidária em saúde mental; Pessoa em situação de rua; saúde mental; Fiscalização de comunidades terapêuticas; Rede de atenção psicossocial; RAPS; unidades de acolhimento; assistência multiprofissional; centros de convivência; Cannabis; canabidiol; tratamento terapêutico; Desinstitucionalização; manicômios; hospitais de custódia; Saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; Dependência química; vícios; ludopatia; Treinamento em saúde mental; capacitação em saúde mental; Intervenções terapêuticas em saúde mental; Internet e redes sociais na saúde mental; Violência psicológica; Surto psicótico
+IEPS|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; Ministério da Saúde; Trabalhadores de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Formação profissional de saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças climáticas; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; complementar; privada; planos de saúde; seguros; seguradoras; planos populares; Anvisa; gestão; governança; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Economia solidária em saúde mental; Pessoa em situação de rua; saúde mental; Fiscalização de comunidades terapêuticas; Rede de atenção psicossocial; RAPS; unidades de acolhimento; assistência multiprofissional; centros de convivência; Cannabis; canabidiol; tratamento terapêutico; Desinstitucionalização; manicômios; hospitais de custódia; Saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; Dependência química; vícios; ludopatia; Treinamento em saúde mental; capacitação em saúde mental; Intervenções terapêuticas em saúde mental; Internet e redes sociais na saúde mental; Violência psicológica; Surto psicótico
 Manual|Saúde|Ozempic; Wegovy; Mounjaro; Telemedicina; Telessaúde; CBD; Cannabis Medicinal; CFM; Conselho Federal de Medicina; Farmácia Magistral; Medicamentos Manipulados; Minoxidil; Emagrecedores; Retenção de receita de medicamentos
 Mevo|Saúde|Prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; autonomia da ANPD; Acesso e uso de dados; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do SUS; venda de medicamentos; distribuição de medicamentos; Bula digital; Atesta CFM; SNGPC; Farmacêutico Remoto; Medicamentos Isentos de Prescrição; MIPs; RNDS; Rede Nacional de Dados em Saúde
 Cactus|Saúde|Saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; Rede de atenção psicossocial; RAPS; CAPS; Centro de Apoio Psicossocial
-Vital Strategies|Saúde|Saúde mental; Dados para a saúde; Morte evitável; Doenças crônicas não transmissíveis; Rotulagem de bebidas alcoólicas; Educação em saúde; Bebidas alcoólicas; Imposto seletivo; Rotulagem de alimentos; Alimentos ultraprocessados; Publicidade infantil; Publicidade de alimentos ultraprocessados; Tributação de bebidas alcoólicas; Alíquota de bebidas alcoólicas; Cigarro eletrônico; Controle de tabaco; Violência doméstica; Exposição a fatores de risco; Departamento de Saúde Mental; Hipertensão arterial; Saúde digital; Violência contra crianças; Violência contra mulheres; Feminicídio; COP 30
+Vital Strategies|Saúde|Saúde mental; Dados para a saúde; Morte evitável; Doenças crônicas não transmissíveis; Rotulagem de bebidas alcoólicas; Educação em saúde; Bebidas alcoólicas; Metanol; Imposto seletivo; Rotulagem de alimentos; Alimentos ultraprocessados; Publicidade infantil; Publicidade de alimentos ultraprocessados; Tributação de bebidas alcoólicas; Alíquota de bebidas alcoólicas; Cigarro eletrônico; Controle de tabaco; Violência doméstica; Exposição a fatores de risco; Departamento de Saúde Mental; Hipertensão arterial; Saúde digital; Violência contra crianças; Violência contra mulheres; Feminicídio; COP 30
 Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; Resolução 258 Conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
 """.strip()
 
@@ -274,6 +329,7 @@ for cli, kws in CLIENT_KEYWORDS.items():
         if pat:
             CLIENT_PATTERNS.append((pat, cli, kw))
 
+
 def procura_termos_clientes(conteudo_raspado):
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (clientes).')
@@ -296,12 +352,22 @@ def procura_termos_clientes(conteudo_raspado):
         conteudo_pagina = None
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
+
+                # filtro novo quando a KW do cliente é "Bebidas Alcoólicas"
+                if kw.strip().lower() == "bebidas alcoólicas":
+                    if conteudo_pagina is None:
+                        conteudo_pagina = _baixar_conteudo_pagina(link)
+                    alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                    if _is_bebidas_ato_irrelevante(alltxt):
+                        continue
+
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_blocked(conteudo_pagina):
                     continue
                 por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina])
     return por_cliente
+
 
 # Google Sheets helpers
 def _gs_client_from_env():
@@ -365,6 +431,7 @@ def salva_na_base(palavras_raspadas):
     else:
         print('Nenhum dado válido para salvar (geral).')
 
+
 # Por cliente (dedupe por Link+Palavra-chave+Cliente)
 def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if not rows:
@@ -414,6 +481,7 @@ def salva_por_cliente(por_cliente: dict):
 
     for cli, rows in (por_cliente or {}).items():
         _append_dedupe_por_cliente(sh, cli, rows)
+
 
 # E-mails
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
@@ -566,6 +634,7 @@ def envia_email_clientes(por_cliente: dict):
         except (ApiException, Exception) as e:
             print(f"❌ Falha ao enviar (clientes) para {dest}: {e}")
 
+
 # Execução principal
 if __name__ == "__main__":
     conteudo = raspa_dou()
@@ -579,5 +648,3 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
-
