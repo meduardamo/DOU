@@ -52,22 +52,53 @@ def _has_any(text_norm: str, patterns: list[re.Pattern]) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 def _is_blocked(text: str) -> bool:
-    """True se o texto contiver menções bloqueadas."""
+    # True se o texto contiver menções bloqueadas
     if not text:
         return False
     nt = _normalize_ws(text)
-
     for pat in EXCLUDE_PATTERNS:
         if pat and pat.search(nt):
             return True
-
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
+    return False
 
+# Filtro específico para "Bebidas Alcoólicas": corta atos/portarias de registro/autorização,
+# mas mantém políticas públicas e regulação ampla.
+_BEBIDAS_EXCLUDE_TERMS = [
+    "ato declaratorio executivo",
+    "registro especial",
+    "declara a inscricao", "concede o registro",
+    "drf", "srrf", "defis", "efi2vit", "regesp",
+    "delegacia da receita federal",
+    "cnpj", "ncm", "mapa",
+    "engarrafador", "produtor", "importador",
+    "marcas comerciais", "atualiza as marcas"
+]
+
+_BEBIDAS_WHITELIST_TERMS = [
+    "lei", "decreto", "projeto de lei",
+    "consulta publica", "audiencia publica",
+    "campanha", "advertencia",
+    "rotulagem", "publicidade", "propaganda",
+    "tributacao", "aliquota",
+    "saude publica",
+    "controle de consumo", "controle de oferta",
+    "pontos de venda",
+    "seguranca viaria", "alcool e direcao",
+    "monitoramento"
+]
+
+def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
+    nt = _normalize_ws(texto_bruto)
+    if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
+        return False
+    if any(t in nt for t in _BEBIDAS_EXCLUDE_TERMS):
+        return True
     return False
 
 # Coleta do conteúdo completo da página do DOU (sempre ligada)
-CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))  # limite de caracteres
+CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))
 _CONTENT_CACHE: dict[str, str] = {}
 
 _HDR = {
@@ -127,10 +158,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
 
 # Raspagem da(s) Edição(ões) Extra (DO1E/DO2E/DO3E…)
 def raspa_dou_extra(data=None, secoes=None):
-    """
-    Retorna a mesma estrutura (dict com jsonArray) combinando as seções extras pedidas.
-    Por padrão tenta DO1E, DO2E, DO3E.
-    """
+    # Retorna a mesma estrutura (dict com jsonArray) combinando as seções extras pedidas
     if data is None:
         data = datetime.now().strftime('%d-%m-%Y')
     if secoes is None:
@@ -179,7 +207,6 @@ PALAVRAS_GERAIS = [
     'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
     'Exposição a Fatores de Risco','Departamento de Saúde Mental',
     'Hipertensão Arterial','Alimentação Escolar','PNAE','Agora Tem Especialistas',
-    # Alfabetização e matemática
     'Alfabetização','Alfabetização na Idade Certa','Criança Alfabetizada','Meta de Alfabetização',
     'Plano Nacional de Alfabetização','Programa Criança Alfabetizada','Idade Certa para Alfabetização',
     'Alfabetização de Crianças','Alfabetização Inicial','Alfabetização Plena',
@@ -199,10 +226,7 @@ PALAVRAS_GERAIS = [
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
 def procura_termos(conteudo_raspado):
-    """
-    Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
-    (com bloqueio CREF/CONFEF e CNE+CES)
-    """
+    # Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (geral extra).')
         return None
@@ -222,10 +246,19 @@ def procura_termos(conteudo_raspado):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
-        conteudo_pagina = None  # baixa apenas se houver match
+        conteudo_pagina = None
 
         for palavra, patt in _PATTERNS_GERAL:
             if patt and patt.search(texto_norm):
+
+                # corta atos/portarias de cadastro quando a palavra é "Bebidas Alcoólicas"
+                if palavra.strip().lower() == "bebidas alcoólicas":
+                    if conteudo_pagina is None:
+                        conteudo_pagina = _baixar_conteudo_pagina(link)
+                    alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                    if _is_bebidas_ato_irrelevante(alltxt):
+                        continue
+
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_blocked(conteudo_pagina):
@@ -284,11 +317,7 @@ for cli, kws in CLIENT_KEYWORDS.items():
             CLIENT_PATTERNS.append((pat, cli, kw))
 
 def procura_termos_clientes(conteudo_raspado):
-    """
-    Retorna dict cliente -> [rows] onde cada row é:
-    [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
-    (com bloqueio CREF/CONFEF e CNE+CES)
-    """
+    # Retorna dict cliente -> [rows] [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
     if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
         print('Nenhum conteúdo para analisar (clientes extra).')
         return {}
@@ -310,6 +339,15 @@ def procura_termos_clientes(conteudo_raspado):
         conteudo_pagina = None
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
+
+                # corta atos/portarias de cadastro quando a KW é "Bebidas Alcoólicas"
+                if kw.strip().lower() == "bebidas alcoólicas":
+                    if conteudo_pagina is None:
+                        conteudo_pagina = _baixar_conteudo_pagina(link)
+                    alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                    if _is_bebidas_ato_irrelevante(alltxt):
+                        continue
+
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_blocked(conteudo_pagina):
@@ -317,9 +355,7 @@ def procura_termos_clientes(conteudo_raspado):
                 por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina or ""])
     return por_cliente
 
-# ============================================================
 # Google Sheets helpers
-# ============================================================
 def _gs_client_from_env():
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if not raw:
@@ -336,7 +372,7 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-# Colunas FIXAS (Conteúdo é sempre a última)
+# Colunas fixas
 COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
 COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa"]
 
@@ -408,6 +444,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
                 existing.add((r[link_idx].strip(),
                               r[palavra_idx].strip() if len(r) > palavra_idx else "",
                               r[cliente_idx].strip() if len(r) > cliente_idx else ""))
+
     new = [r for r in rows if (r[link_idx].strip(), r[palavra_idx].strip(), r[cliente_idx].strip()) not in existing]
     if not new:
         print(f"[{sheet_name}] nada novo.")
@@ -425,7 +462,6 @@ def salva_por_cliente(por_cliente: dict):
     gc = _gs_client_from_env()
     sh = gc.open_by_key(plan_id)
 
-    # Garante existência das abas
     for cli in CLIENT_KEYWORDS.keys():
         try:
             ws = sh.worksheet(cli); _ensure_header(ws, COLS_CLIENTE)
