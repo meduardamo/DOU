@@ -27,7 +27,7 @@ BATCH_SIZE = int(os.getenv("ALIGN_BATCH", "25"))
 SLEEP_SEC  = float(os.getenv("ALIGN_SLEEP", "0.10"))
 
 # MAPA: ABA -> (NOME, DESCRIÇÃO)
-ORG_MAP = {
+CLIENTE_DESCRICOES = {
     "IU": ("Instituto Unibanco (IU)",
            "O Instituto Unibanco (IU) é uma organização sem fins lucrativos que apoia redes estaduais de ensino na melhoria da gestão educacional por meio de projetos como o Jovem de Futuro, produção de conhecimento e apoio técnico a secretarias de educação."),
     "FMCSV": ("Fundação Maria Cecilia Souto Vidigal (FMCSV)",
