@@ -561,4 +561,4 @@ if __name__ == "__main__":
     qtd_clientes = salva_por_cliente(por_cliente)
 
     # 3) E-mail só se houve algo novo
-    envia_email_brevo_extra(geral, qtd_clientes, qtd_geral
+    envia_email_brevo_extra(geral, qtd_clientes, qtd_geral)
