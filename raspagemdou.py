@@ -641,12 +641,11 @@ if __name__ == "__main__":
     conteudo = raspa_dou()
 
     # 1) Planilha geral
-    geral = procura_termos(conteudo)
-    salva_na_base(geral)
-    envia_email_geral(geral)
+    #geral = procura_termos(conteudo)
+    #salva_na_base(geral)
+    #envia_email_geral(geral)
 
     # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
