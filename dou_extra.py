@@ -1,15 +1,20 @@
-import os, re, json, unicodedata, requests, gspread
+import os
+import re
+import json
+import html
+import unicodedata
+import requests
+import gspread
 from bs4 import BeautifulSoup
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 
-# E-mail (Brevo) – mesmo formato do diário, com assunto [DOU EXTRA]
 from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
 
-# Normalização + busca whole-word
+
 def _normalize(s: str) -> str:
     if s is None:
         return ""
@@ -17,16 +22,18 @@ def _normalize(s: str) -> str:
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return t.lower()
 
+
 def _normalize_ws(s: str) -> str:
-    return re.sub(r'[^a-z0-9]+', ' ', _normalize(s)).strip()
+    return re.sub(r"[^a-z0-9]+", " ", _normalize(s)).strip()
+
 
 def _wholeword_pattern(phrase: str):
     toks = [t for t in _normalize_ws(phrase).split() if t]
     if not toks:
         return None
-    return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
+    return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
-# BLOQUEIO DE MENÇÕES (CREF/CONFEF) + CNE/CES
+
 EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Regional de Educação Física"),
     _wholeword_pattern("Conselho Federal de Educação Física"),
@@ -48,11 +55,12 @@ _CES_PATTERNS = [
     re.compile(r"\bCES\b", re.I),
 ]
 
-def _has_any(text_norm: str, patterns: list[re.Pattern]) -> bool:
+
+def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
+
 def _is_blocked(text: str) -> bool:
-    # True se o texto contiver menções bloqueadas
     if not text:
         return False
     nt = _normalize_ws(text)
@@ -63,8 +71,7 @@ def _is_blocked(text: str) -> bool:
         return True
     return False
 
-# Filtro específico para "Bebidas Alcoólicas": corta atos/portarias de registro/autorização,
-# mas mantém políticas públicas e regulação ampla.
+
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -89,6 +96,7 @@ _BEBIDAS_WHITELIST_TERMS = [
     "monitoramento"
 ]
 
+
 def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     nt = _normalize_ws(texto_bruto)
     if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
@@ -97,9 +105,9 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
         return True
     return False
 
-# Coleta do conteúdo completo da página do DOU (sempre ligada)
+
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))
-_CONTENT_CACHE: dict[str, str] = {}
+_CONTENT_CACHE = {}
 
 _HDR = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -107,11 +115,13 @@ _HDR = {
                   "(KHTML, like Gecko) Chrome/126 Safari/537.36"
 }
 
+
 def _baixar_conteudo_pagina(url: str) -> str:
     if not url:
         return ""
     if url in _CONTENT_CACHE:
         return _CONTENT_CACHE[url]
+
     try:
         r = requests.get(url, timeout=40, headers=_HDR)
         r.raise_for_status()
@@ -156,129 +166,72 @@ def _baixar_conteudo_pagina(url: str) -> str:
     except Exception:
         return ""
 
-# Raspagem da(s) Edição(ões) Extra (DO1E/DO2E/DO3E…)
+
 def raspa_dou_extra(data=None, secoes=None):
-    # Retorna a mesma estrutura (dict com jsonArray) combinando as seções extras pedidas
     if data is None:
-        data = datetime.now().strftime('%d-%m-%Y')
+        data = datetime.now().strftime("%d-%m-%Y")
     if secoes is None:
         secoes = [s.strip() for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",") if s.strip()]
-    print(f'Raspando edição EXTRA do dia {data} nas seções: {", ".join(secoes)}…')
 
+    print(f"Raspando edição EXTRA do dia {data} nas seções: {', '.join(secoes)}…")
     combined = {"jsonArray": []}
+
     for sec in secoes:
         try:
-            url = f'http://www.in.gov.br/leiturajornal?data={data}&secao={sec}'
+            url = f"http://www.in.gov.br/leiturajornal?data={data}&secao={sec}"
             page = requests.get(url, timeout=40, headers=_HDR)
             if page.status_code != 200:
                 continue
-            soup = BeautifulSoup(page.text, 'html.parser')
+            soup = BeautifulSoup(page.text, "html.parser")
             params = soup.find("script", {"id": "params"})
             if not params:
                 continue
             j = json.loads(params.text)
             arr = j.get("jsonArray", [])
             if arr:
+                for it in arr:
+                    if isinstance(it, dict) and "secao_extra" not in it:
+                        it["secao_extra"] = sec
                 combined["jsonArray"].extend(arr)
         except Exception:
             continue
 
     if combined["jsonArray"]:
-        print(f'OK, coletadas {len(combined["jsonArray"])} entradas (extra).')
+        print(f"OK, coletadas {len(combined['jsonArray'])} entradas (extra).")
         return combined
+
     print("Nenhum item encontrado na(s) seção(ões) extra.")
     return None
 
-# Palavras gerais (planilha geral)
+
 PALAVRAS_GERAIS = [
-    'Infância','Criança','Infantil','Infâncias','Crianças',
-    'Educação','Ensino','Escolaridade',
-    'Plano Nacional da Educação','PNE','Educacional',
-    'Alfabetização','Letramento',
-    'Saúde','Telessaúde','Telemedicina',
-    'Digital','Digitais','Prontuário',
-    'Programa Saúde na Escola','PSE',
-    'Psicosocial','Mental','Saúde Mental','Dados para a Saúde','Morte Evitável',
-    'Doenças Crônicas Não Transmissíveis','Rotulagem de Bebidas Alcoólicas',
-    'Educação em Saúde','Bebidas Alcoólicas','Imposto Seletivo',
-    'Rotulagem de Alimentos','Alimentos Ultraprocessados',
-    'Publicidade Infantil','Publicidade de Alimentos Ultraprocessados',
-    'Tributação de Bebidas Alcoólicas','Alíquota de Bebidas Alcoólicas',
-    'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
-    'Exposição a Fatores de Risco','Departamento de Saúde Mental',
-    'Hipertensão Arterial','Alimentação Escolar','PNAE','Agora Tem Especialistas',
-    'Alfabetização','Alfabetização na Idade Certa','Criança Alfabetizada','Meta de Alfabetização',
-    'Plano Nacional de Alfabetização','Programa Criança Alfabetizada','Idade Certa para Alfabetização',
-    'Alfabetização de Crianças','Alfabetização Inicial','Alfabetização Plena',
-    'Alfabetização em Língua Portuguesa','Analfabetismo','Erradicação do Analfabetismo',
-    'Programa Nacional de Alfabetização na Idade Certa','Pacto pela Alfabetização',
-    'Política Nacional de Alfabetização','Recomposição das Aprendizagens em Alfabetização',
-    'Competências de Alfabetização','Avaliação da Alfabetização','Saeb Alfabetização',
-    'Alfabetização Matemática','Analfabetismo Matemático','Aprendizagem em Matemática',
-    'Recomposição das Aprendizagens em Matemática','Recomposição de Aprendizagem',
-    'Competências Matemáticas','Proficiência em Matemática',
-    'Avaliação Diagnóstica de Matemática','Avaliação Formativa de Matemática',
-    'Política Nacional de Matemática','Saeb Matemática','Ideb Matemática','BNCC Matemática',
-    'Matemática no Ensino Fundamental','Matemática no Ensino Médio',
-    'Anos Iniciais de Matemática','Anos Finais de Matemática','OBMEP',
-    'Olimpíada Brasileira de Matemática das Escolas Públicas','Olimpíada de Matemática','PNLD Matemática'
+    "Infância", "Criança", "Infantil", "Infâncias", "Crianças",
+    "Educação", "Ensino", "Escolaridade",
+    "Plano Nacional da Educação", "PNE", "Educacional",
+    "Alfabetização", "Letramento",
+    "Saúde", "Telessaúde", "Telemedicina",
+    "Digital", "Digitais", "Prontuário",
+    "Programa Saúde na Escola", "PSE",
+    "Psicosocial", "Mental", "Saúde Mental", "Dados para a Saúde", "Morte Evitável",
+    "Doenças Crônicas Não Transmissíveis", "Rotulagem de Bebidas Alcoólicas",
+    "Educação em Saúde", "Bebidas Alcoólicas", "Imposto Seletivo",
+    "Rotulagem de Alimentos", "Alimentos Ultraprocessados",
+    "Publicidade Infantil", "Publicidade de Alimentos Ultraprocessados",
+    "Tributação de Bebidas Alcoólicas", "Alíquota de Bebidas Alcoólicas",
+    "Cigarro Eletrônico", "Controle de Tabaco", "Violência Doméstica",
+    "Exposição a Fatores de Risco", "Departamento de Saúde Mental",
+    "Hipertensão Arterial", "Alimentação Escolar", "PNAE", "Agora Tem Especialistas",
+    "Alfabetização na Idade Certa", "Criança Alfabetizada", "Meta de Alfabetização",
+    "Programa Criança Alfabetizada", "Pacto pela Alfabetização",
+    "Recomposição das Aprendizagens em Alfabetização",
+    "Alfabetização Matemática", "Analfabetismo Matemático",
+    "Recomposição das Aprendizagens em Matemática",
+    "Política Nacional de Matemática", "Saeb Matemática", "Ideb Matemática", "BNCC Matemática",
+    "OBMEP", "Olimpíada Brasileira de Matemática das Escolas Públicas", "PNLD Matemática"
 ]
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
-def procura_termos(conteudo_raspado):
-    # Planilha geral — Data | Palavra-chave | Portaria | Link | Resumo | Conteúdo
-    if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
-        print('Nenhum conteúdo para analisar (geral extra).')
-        return None
 
-    print('Buscando palavras-chave (geral, whole-word, título+resumo)…')
-    URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
-    resultados_por_palavra = {palavra: [] for palavra in PALAVRAS_GERAIS}
-    algum = False
-
-    for resultado in conteudo_raspado['jsonArray']:
-        titulo   = resultado.get('title', 'Título não disponível')
-        resumo   = resultado.get('content', '')
-        link     = URL_BASE + resultado.get('urlTitle', '')
-        data_pub = (resultado.get('pubDate', '') or '')[:10]
-
-        if _is_blocked(titulo + " " + resumo):
-            continue
-
-        texto_norm = _normalize_ws(titulo + " " + resumo)
-        conteudo_pagina = None
-
-        for palavra, patt in _PATTERNS_GERAL:
-            if patt and patt.search(texto_norm):
-
-                # corta atos/portarias de cadastro quando a palavra é "Bebidas Alcoólicas"
-                if palavra.strip().lower() == "bebidas alcoólicas":
-                    if conteudo_pagina is None:
-                        conteudo_pagina = _baixar_conteudo_pagina(link)
-                    alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
-                    if _is_bebidas_ato_irrelevante(alltxt):
-                        continue
-
-                if conteudo_pagina is None:
-                    conteudo_pagina = _baixar_conteudo_pagina(link)
-                if _is_blocked(conteudo_pagina):
-                    continue
-                resultados_por_palavra[palavra].append({
-                    'date': data_pub,
-                    'title': titulo,
-                    'href': link,
-                    'abstract': resumo,
-                    'content_page': conteudo_pagina or ""
-                })
-                algum = True
-
-    if not algum:
-        print('Nenhum resultado encontrado (geral extra).')
-        return None
-    print('Palavras-chave (geral extra) encontradas.')
-    return resultados_por_palavra
-
-# Mapa: Cliente → Tema → Keywords (whole-word)
 CLIENT_THEME_DATA = """
 IAS|Educação|Matemática; Alfabetização; Alfabetização Matemática; Recomposição de aprendizagem; Plano Nacional de Educação
 ISG|Educação|Tempo Integral; Ensino em tempo integral; Ensino Profissional e Tecnológico; Fundeb; PROPAG; Educação em tempo integral; Escola em tempo integral; Plano Nacional de Educação; Programa escola em tempo integral; Programa Pé-de-meia; PNEERQ; INEP; FNDE; Conselho Nacional de Educação; PDDE; Programa de Fomento às Escolas de Ensino Médio em Tempo Integral; Celular nas escolas; Juros da Educação
@@ -295,53 +248,109 @@ Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 
 IDEC|Saúde|Defesa do consumidor; Ação Civil Pública; Arbitragem; SAC; Concorrência; Reforma Tributária; Ultraprocessados; Doenças crônicas não transmissíveis (DCNTs); Obesidade; Codex alimentarius; Gordura trans; Adoçantes; edulcorantes; Rotulagem de alimentos; Transgênicos; Organismos geneticamente modificados (OGMs); Marketing e publicidade de alimentos; Comunicação mercadológica; alimentação escolar; bebidas açucaradas; refrigerante; Programa Nacional de Alimentação Escolar (PNAE); Educação Alimentar e Nutricional (EAN); Agrotóxicos; pesticidas; defensivos fitossanitários; agrícolas; Orgânicos; Tributação de alimentos não saudáveis; Desertos alimentares; Desperdício de alimentos; desperdício alimentar; Segurança Alimentar e Nutricional (SAN); Direito Humano à Alimentação; Fome; Sustentabilidade; Mudança climática; Plástico; Gestão de resíduos; Economia Circular; Desmatamento; Greenwashing; Energia elétrica; Encargos tarifários; Subsidios na tarifa de energia; Descontos na tarifa de energia; Energia pré-paga; Abertura mercado energia para consumidor cativo; Mercado livre de energia; Qualidade do serviço de energia; Tarifa Social de energia elétrica; Geração térmica; Combustíveis fósseis; Transição energética; Descarbonização da matriz elétrica; Gases de Efeito Estufa; Acordo de Paris; Objetivos do Desenvolvimento Sustentável; Reestruturação setor de energia; Reforma do setor elétrico; Modernização do setor elétrico; Itens de custo da tarifa de energia elétrica; Universalização do acesso à energia; Eficiência energética; Geração distribuída; Carvão mineral; Painel Solar; Cadastro Positivo; Plano de Saúde; Saúde Suplementar; Medicamentos Isentos de Prescrição (MIP); Medicamentos Antibióticos; Antimicrobianos; Propriedade Intelectual; Patentes Licença Compulsória; Preços de medicamentos; Complexo Econômico-Industrial da Saúde; Saúde Digital; Prontuário eletrônico; Rede Nacional de Dados e Saúde (RNDS); Datasus; Proteção de dados pessoais; Telessaúde; Digital; Telecomunicações; Internet; TV por assinatura; Serviço de Acesso Condicionado; Telefonia Móvel; Telefonia Fixa; TV Digital; Proteção de Dados; Lei Geral de Proteção de Dados (LGPD); Autoridade Nacional de Proteção de Dados (ANPD); Reconhecimento facial; Lei Geral de Telecomunicações; Bens reversíveis; Fundo de Universalização das Telecomunicações (FUST); provedores de acesso; Franquia de dados; Marco Civil da Internet; Neutralidade de rede; zero rating; Privacidade; Lei de Acesso à Informação; Franquia de internet; regulação de plataformas digitais; desinformação; fake news; Dados biométricos; Vazamento de dados; Telemarketing; Serviço de Valor Adicionado (SVA)
 """.strip()
 
+
 def _parse_client_keywords(text: str):
     out = {}
     for line in text.splitlines():
         if not line.strip():
             continue
-        cliente, tema, kws = [x.strip() for x in line.split("|", 2)]
+        cliente, _tema, kws = [x.strip() for x in line.split("|", 2)]
         out.setdefault(cliente, [])
         for kw in [k.strip() for k in kws.split(";") if k.strip()]:
             if kw not in out[cliente]:
                 out[cliente].append(kw)
     return out
 
+
 CLIENT_KEYWORDS = _parse_client_keywords(CLIENT_THEME_DATA)
 
-# pré-compila padrões por cliente
-CLIENT_PATTERNS = []  # (regex, cliente, kw_original)
+CLIENT_PATTERNS = []
 for cli, kws in CLIENT_KEYWORDS.items():
     for kw in kws:
         pat = _wholeword_pattern(kw)
         if pat:
             CLIENT_PATTERNS.append((pat, cli, kw))
 
-def procura_termos_clientes(conteudo_raspado):
-    # Retorna dict cliente -> [rows] [Data, Cliente, Palavra-chave, Portaria, Link, Resumo, Conteúdo]
-    if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
-        print('Nenhum conteúdo para analisar (clientes extra).')
-        return {}
 
-    print('Buscando palavras-chave por cliente (whole-word, título+resumo)…')
-    URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
-    por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
+def procura_termos_geral(conteudo_raspado):
+    if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
+        print("Nenhum conteúdo para analisar (geral extra).")
+        return None
 
-    for r in conteudo_raspado['jsonArray']:
-        titulo   = r.get('title', 'Título não disponível')
-        resumo   = r.get('content', '')
-        link     = URL_BASE + r.get('urlTitle', '')
-        data_pub = (r.get('pubDate', '') or '')[:10]
+    print("Buscando palavras-chave (geral, whole-word, título+resumo)…")
+    URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
+    resultados_por_palavra = {kw: [] for kw in PALAVRAS_GERAIS}
+    algum = False
+
+    for r in conteudo_raspado["jsonArray"]:
+        titulo = r.get("title", "Título não disponível")
+        resumo = r.get("content", "")
+        link = URL_BASE + r.get("urlTitle", "")
+        data_pub = (r.get("pubDate", "") or "")[:10]
+        secao_extra = r.get("secao_extra", "")
 
         if _is_blocked(titulo + " " + resumo):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
         conteudo_pagina = None
+
+        for palavra, patt in _PATTERNS_GERAL:
+            if patt and patt.search(texto_norm):
+                if palavra.strip().lower() == "bebidas alcoólicas":
+                    if conteudo_pagina is None:
+                        conteudo_pagina = _baixar_conteudo_pagina(link)
+                    alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                    if _is_bebidas_ato_irrelevante(alltxt):
+                        continue
+
+                if conteudo_pagina is None:
+                    conteudo_pagina = _baixar_conteudo_pagina(link)
+                if _is_blocked(conteudo_pagina):
+                    continue
+
+                resultados_por_palavra[palavra].append({
+                    "date": data_pub,
+                    "secao_extra": secao_extra,
+                    "title": titulo,
+                    "href": link,
+                    "abstract": resumo,
+                    "content_page": conteudo_pagina or ""
+                })
+                algum = True
+
+    if not algum:
+        print("Nenhum resultado encontrado (geral extra).")
+        return None
+
+    print("Palavras-chave (geral extra) encontradas.")
+    return resultados_por_palavra
+
+
+def procura_termos_clientes(conteudo_raspado):
+    if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
+        print("Nenhum conteúdo para analisar (clientes extra).")
+        return {}
+
+    print("Buscando palavras-chave por cliente (whole-word, título+resumo)…")
+    URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
+    por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
+
+    for r in conteudo_raspado["jsonArray"]:
+        titulo = r.get("title", "Título não disponível")
+        resumo = r.get("content", "")
+        link = URL_BASE + r.get("urlTitle", "")
+        data_pub = (r.get("pubDate", "") or "")[:10]
+        secao_extra = r.get("secao_extra", "")
+
+        if _is_blocked(titulo + " " + resumo):
+            continue
+
+        texto_norm = _normalize_ws(titulo + " " + resumo)
+        conteudo_pagina = None
+
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
-
-                # corta atos/portarias de cadastro quando a KW é "Bebidas Alcoólicas"
                 if kw.strip().lower() == "bebidas alcoólicas":
                     if conteudo_pagina is None:
                         conteudo_pagina = _baixar_conteudo_pagina(link)
@@ -353,87 +362,140 @@ def procura_termos_clientes(conteudo_raspado):
                     conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_blocked(conteudo_pagina):
                     continue
-                por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina or ""])
+
+                por_cliente[cliente].append([
+                    data_pub,
+                    cliente,
+                    kw,
+                    titulo,
+                    link,
+                    resumo,
+                    conteudo_pagina or "",
+                    "",
+                    ""
+                ])
+
     return por_cliente
 
-# Google Sheets helpers
+
 def _gs_client_from_env():
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
     if not raw:
         jf = "credentials.json"
         if os.path.exists(jf):
-            scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
             creds = Credentials.from_service_account_file(jf, scopes=scopes)
             return gspread.authorize(creds)
-        raise RuntimeError("Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado.")
+        raise RuntimeError("Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado e credentials.json não existe.")
+
     info = json.loads(raw)
     if "private_key" in info and "\\n" in info["private_key"]:
         info["private_key"] = info["private_key"].replace("\\n", "\n")
-    scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-# Colunas fixas
-COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
-COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa"]
+
+COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo"]
+COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa"]
+
 
 def _ensure_header(ws, header):
     first = ws.row_values(1)
     if first != header:
         ws.resize(rows=max(2, ws.row_count), cols=len(header))
-        ws.update('1:1', [header])
+        ws.update("1:1", [header])
 
-# Geral
-def salva_na_base(palavras_raspadas):
+
+def _ws_gid(ws) -> str:
+    try:
+        return str(ws.id)
+    except Exception:
+        return ""
+
+
+def salva_geral_dedupe(palavras_raspadas):
     if not palavras_raspadas:
-        print('Sem palavras encontradas para salvar (geral extra).')
-        return 0
-    print('Salvando (geral extra) na planilha…')
+        print("Sem palavras encontradas para salvar (geral extra).")
+        return 0, [], None, None
 
     gc = _gs_client_from_env()
-    planilha_id = os.getenv('PLANILHA')
+    planilha_id = os.getenv("PLANILHA")
     if not planilha_id:
         raise RuntimeError("Env PLANILHA não definido (use apenas a key entre /d/ e /edit).")
 
     sh = gc.open_by_key(planilha_id)
+
     try:
-        ws = sh.worksheet('Página1')
+        ws = sh.worksheet("Página1")
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title='Página1', rows="2000", cols=str(len(COLS_GERAL)))
+        ws = sh.add_worksheet(title="Página1", rows="2000", cols=str(len(COLS_GERAL)))
+
     _ensure_header(ws, COLS_GERAL)
 
-    rows_to_append = []
+    link_idx = COLS_GERAL.index("Link")
+    palavra_idx = COLS_GERAL.index("Palavra-chave")
+
+    all_vals = ws.get_all_values()
+    existing = set()
+    if len(all_vals) > 1:
+        for r in all_vals[1:]:
+            if len(r) > link_idx:
+                existing.add((r[link_idx].strip(), r[palavra_idx].strip() if len(r) > palavra_idx else ""))
+
+    rows_to_insert = []
+    inserted_items = []
+
     for palavra, lista in (palavras_raspadas or {}).items():
         for item in lista:
+            href = (item.get("href", "") or "").strip()
+            key = (href, palavra)
+            if not href or key in existing:
+                continue
+
             row = [
-                item.get('date',''),
+                item.get("date", ""),
                 palavra,
-                item.get('title',''),
-                item.get('href',''),
-                item.get('abstract',''),
-                item.get('content_page','')
+                item.get("title", ""),
+                href,
+                item.get("abstract", ""),
+                item.get("content_page", "")
             ]
-            rows_to_append.append(row)
+            rows_to_insert.append(row)
+            inserted_items.append({
+                "date": item.get("date", ""),
+                "secao_extra": item.get("secao_extra", ""),
+                "keyword": palavra,
+                "title": item.get("title", ""),
+                "href": href,
+                "abstract": item.get("abstract", "")
+            })
+            existing.add(key)
 
-    if rows_to_append:
-        ws.insert_rows(rows_to_append, row=2, value_input_option='USER_ENTERED')
-        print(f"{len(rows_to_append)} linhas adicionadas (geral extra).")
+    if rows_to_insert:
+        ws.insert_rows(rows_to_insert, row=2, value_input_option="USER_ENTERED")
+        print(f"{len(rows_to_insert)} linhas adicionadas (geral extra).")
     else:
-        print('Nenhum dado válido para salvar (geral extra).')
-    return len(rows_to_append)
+        print("Nenhuma linha nova (geral extra).")
 
-# Por cliente (dedupe por Link+Palavra-chave+Cliente)
-def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
+    return len(rows_to_insert), inserted_items, sh, ws
+
+
+def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
     if not rows:
-        print(f"[{sheet_name}] sem linhas para anexar.")
-        return 0
+        return 0, []
+
     try:
         ws = sh.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=sheet_name, rows=str(max(100, len(rows)+10)), cols=len(COLS_CLIENTE))
+        ws = sh.add_worksheet(title=sheet_name, rows=str(max(100, len(rows) + 10)), cols=len(COLS_CLIENTE))
+
     _ensure_header(ws, COLS_CLIENTE)
 
-    link_idx    = COLS_CLIENTE.index("Link")
+    link_idx = COLS_CLIENTE.index("Link")
     palavra_idx = COLS_CLIENTE.index("Palavra-chave")
     cliente_idx = COLS_CLIENTE.index("Cliente")
 
@@ -442,123 +504,280 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if len(all_vals) > 1:
         for r in all_vals[1:]:
             if len(r) > link_idx:
-                existing.add((r[link_idx].strip(),
-                              r[palavra_idx].strip() if len(r) > palavra_idx else "",
-                              r[cliente_idx].strip() if len(r) > cliente_idx else ""))
+                existing.add((
+                    r[link_idx].strip(),
+                    r[palavra_idx].strip() if len(r) > palavra_idx else "",
+                    r[cliente_idx].strip() if len(r) > cliente_idx else ""
+                ))
 
-    new = [r for r in rows if (r[link_idx].strip(), r[palavra_idx].strip(), r[cliente_idx].strip()) not in existing]
-    if not new:
-        print(f"[{sheet_name}] nada novo.")
-        return 0
+    new_rows = []
+    inserted_items = []
 
-    ws.insert_rows(new, row=2, value_input_option="USER_ENTERED")
-    print(f"[{sheet_name}] +{len(new)} linhas (extra).")
-    return len(new)
+    for r in rows:
+        if len(r) <= link_idx:
+            continue
+        href = (r[link_idx] or "").strip()
+        kw = (r[palavra_idx] or "").strip()
+        cli = (r[cliente_idx] or "").strip()
+        key = (href, kw, cli)
+        if not href or key in existing:
+            continue
 
-def salva_por_cliente(por_cliente: dict):
+        new_rows.append(r)
+        inserted_items.append({
+            "date": r[0],
+            "cliente": cli,
+            "keyword": kw,
+            "title": r[3],
+            "href": href,
+            "abstract": r[5]
+        })
+        existing.add(key)
+
+    if not new_rows:
+        return 0, []
+
+    ws.insert_rows(new_rows, row=2, value_input_option="USER_ENTERED")
+    return len(new_rows), inserted_items
+
+
+def salva_por_cliente(por_cliente):
     plan_id = os.getenv("PLANILHA_CLIENTES")
     if not plan_id:
         print("PLANILHA_CLIENTES não definido; pulando saída por cliente (extra).")
-        return 0
+        return 0, {}, None, {}
+
     gc = _gs_client_from_env()
     sh = gc.open_by_key(plan_id)
 
+    gids = {}
     for cli in CLIENT_KEYWORDS.keys():
         try:
-            ws = sh.worksheet(cli); _ensure_header(ws, COLS_CLIENTE)
+            ws = sh.worksheet(cli)
         except gspread.WorksheetNotFound:
             ws = sh.add_worksheet(title=cli, rows="2", cols=len(COLS_CLIENTE))
-            _ensure_header(ws, COLS_CLIENTE)
+        _ensure_header(ws, COLS_CLIENTE)
+        gids[cli] = _ws_gid(ws)
 
     total_new = 0
-    for cli, rows in (por_cliente or {}).items():
-        total_new += _append_dedupe_por_cliente(sh, cli, rows)
-    return total_new
+    inserted_map = {}
 
-# E-mail (Brevo) — só envia se houve ao menos 1 linha nova
+    for cli, rows in (por_cliente or {}).items():
+        n, inserted_items = _append_dedupe_por_cliente(sh, cli, rows)
+        if n > 0:
+            total_new += n
+            inserted_map[cli] = inserted_items
+
+    return total_new, inserted_map, sh, gids
+
+
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
+
 
 def _sanitize_emails(raw_list: str):
     if not raw_list:
         return []
-    parts = re.split(r'[,\n;]+', raw_list)
+    parts = re.split(r"[,\n;]+", raw_list)
     emails, seen = [], set()
     for it in parts:
         s = unicodedata.normalize("NFKC", it)
-        s = re.sub(r'[\u200B-\u200D\uFEFF]', '', s).strip().strip("'").strip('"')
+        s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s).strip().strip("'").strip('"')
         if not s:
             continue
         m = EMAIL_RE.match(s)
         candidate = (m.group(2) if m else s).strip()
         if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate) and candidate.lower() not in seen:
-            seen.add(candidate.lower()); emails.append(candidate.lower())
+            seen.add(candidate.lower())
+            emails.append(candidate.lower())
     return emails
 
-def envia_email_brevo_extra(palavras_raspadas, total_clientes, total_geral):
-    total = int(total_clientes) + int(total_geral)
-    if total <= 0:
-        print('Nada novo — e-mail (extra) não será enviado.')
+
+def _gs_tab_url(sheet_id: str, gid: str | None):
+    if not sheet_id:
+        return ""
+    if not gid:
+        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
+    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit#gid={gid}"
+
+
+def _unique_item_count(inserted_general, inserted_clients_map) -> int:
+    hrefs = set()
+    for it in (inserted_general or []):
+        h = (it.get("href", "") or "").strip()
+        if h:
+            hrefs.add(h)
+    for _cli, lst in (inserted_clients_map or {}).items():
+        for it in (lst or []):
+            h = (it.get("href", "") or "").strip()
+            if h:
+                hrefs.add(h)
+    return len(hrefs)
+
+
+def _build_email_minimo_html(
+    inserted_general,
+    inserted_clients_map,
+    planilha_id,
+    planilha_gid,
+    planilha_clientes_id,
+):
+    qtd_geral = len(inserted_general or [])
+    qtd_clientes = sum(len(v) for v in (inserted_clients_map or {}).values())
+    itens_novos = _unique_item_count(inserted_general, inserted_clients_map)
+
+    if itens_novos <= 0 and qtd_geral <= 0 and qtd_clientes <= 0:
+        return ""
+
+    kw_to_general = {}
+    kw_to_clients = {}
+
+    for it in (inserted_general or []):
+        kw = (it.get("keyword", "") or "").strip()
+        if kw:
+            kw_to_general[kw] = True
+
+    for cli, lst in (inserted_clients_map or {}).items():
+        for it in (lst or []):
+            kw = (it.get("keyword", "") or "").strip()
+            if not kw:
+                continue
+            kw_to_clients.setdefault(kw, set()).add(cli)
+
+    all_kws = sorted(set(list(kw_to_general.keys()) + list(kw_to_clients.keys())), key=lambda x: x.lower())
+    palavras_acionadas = len(all_kws)
+
+    clientes_afetados = sorted(set(inserted_clients_map.keys()), key=lambda x: x.lower())
+    clientes_txt = f" ({', '.join(clientes_afetados)})" if clientes_afetados else ""
+
+    geral_url = _gs_tab_url(planilha_id, planilha_gid)
+    clientes_url = _gs_tab_url(planilha_clientes_id, None)
+
+    lines = []
+    for kw in all_kws:
+        in_g = kw_to_general.get(kw, False)
+        clients = sorted(list(kw_to_clients.get(kw, set())), key=lambda x: x.lower())
+
+        if in_g and clients:
+            destino = f"Geral + Cliente: {', '.join(clients)}"
+        elif in_g:
+            destino = "Geral"
+        elif clients:
+            destino = f"Cliente: {', '.join(clients)}"
+        else:
+            destino = "—"
+
+        lines.append(f"<li><b>{html.escape(kw)}</b> → {html.escape(destino)}</li>")
+
+    acionamentos_html = "<ul style='margin:8px 0 0 18px; padding:0;'>" + "".join(lines) + "</ul>" if lines else "<p style='margin:8px 0 0 0;'>—</p>"
+
+    body = f"""
+    <html>
+      <body style="font-family: Arial, Helvetica, sans-serif; color:#111; line-height:1.35;">
+        <div style="max-width:820px;">
+          <h2 style="margin:0 0 6px 0;">Edição Extra do DOU</h2>
+          <p style="margin:0 0 14px 0;">Atualização automática baseada em palavras-chave monitoradas.</p>
+
+          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin:0 0 12px 0;">
+            <div>Itens novos: <b>{itens_novos}</b></div>
+            <div>Entradas na planilha geral: <b>{qtd_geral}</b></div>
+            <div>Entradas por cliente: <b>{qtd_clientes}</b>{html.escape(clientes_txt) if clientes_txt else ""}</div>
+            <div>Palavras-chave acionadas: <b>{palavras_acionadas}</b></div>
+
+            <div style="margin-top:10px;">
+              <a href="{html.escape(geral_url)}" target="_blank"
+                 style="display:inline-block; padding:8px 10px; border:1px solid #111; border-radius:8px; text-decoration:none; margin-right:8px;">
+                 Abrir planilha geral
+              </a>
+              <a href="{html.escape(clientes_url)}" target="_blank"
+                 style="display:inline-block; padding:8px 10px; border:1px solid #111; border-radius:8px; text-decoration:none;">
+                 Ver abas por cliente
+              </a>
+            </div>
+          </div>
+
+          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px;">
+            <div style="margin:0 0 6px 0;"><b>Acionamentos (palavra-chave → destino)</b></div>
+            {acionamentos_html}
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+    return body
+
+
+def envia_email_brevo_extra_minimo(
+    inserted_general,
+    inserted_clients_map,
+    planilha_id,
+    planilha_gid,
+    planilha_clientes_id,
+):
+    qtd_geral = len(inserted_general or [])
+    qtd_clientes = sum(len(v) for v in (inserted_clients_map or {}).values())
+    itens_novos = _unique_item_count(inserted_general, inserted_clients_map)
+
+    if itens_novos <= 0 and qtd_geral <= 0 and qtd_clientes <= 0:
+        print("Nada novo — e-mail (extra) não será enviado.")
         return
 
-    api_key = os.getenv('BREVO_API_KEY')
-    sender_email = os.getenv('EMAIL')
-    raw_dest = os.getenv('DESTINATARIOS', '')
+    api_key = os.getenv("BREVO_API_KEY")
+    sender_email = os.getenv("EMAIL")
+    raw_dest = os.getenv("DESTINATARIOS", "")
     if not (api_key and sender_email and raw_dest):
         print("Dados de e-mail incompletos; pulando envio (extra).")
         return
 
     destinatarios = _sanitize_emails(raw_dest)
-    data = datetime.now().strftime('%d-%m-%Y')
-    titulo = f'Resultados do Diário Oficial (EXTRA) — {data}'
-    planilha_url = f'https://docs.google.com/spreadsheets/d/{os.getenv("PLANILHA")}/edit?gid=0'
+    hoje = datetime.now().strftime("%d-%m-%Y")
+    subject = f"DOU EXTRA — {hoje} | {itens_novos} itens novos"
 
-    parts = [
-        "<html><body>",
-        "<h1>Edição Extra do DOU</h1>",
-        f"<p>Foram adicionados <b>{total}</b> itens. Veja a ",
-        f'<a href="{planilha_url}" target="_blank">planilha geral</a> e as abas por cliente.</p>'
-    ]
-    shown = 0
-    for palavra, lista in (palavras_raspadas or {}).items():
-        if not lista:
-            continue
-        parts.append(f"<h3>{palavra}</h3><ul>")
-        for r in lista[:5]:
-            link = r.get('href', '#')
-            title = r.get('title', '(sem título)')
-            parts.append(f"<li><a href='{link}'>{title}</a></li>")
-            shown += 1
-        parts.append("</ul>")
-        if shown >= 15:
-            break
-    parts.append("</body></html>")
-    html = "".join(parts)
+    html_body = _build_email_minimo_html(
+        inserted_general=inserted_general or [],
+        inserted_clients_map=inserted_clients_map or {},
+        planilha_id=planilha_id,
+        planilha_gid=planilha_gid,
+        planilha_clientes_id=planilha_clientes_id,
+    )
 
-    cfg = Configuration(); cfg.api_key['api-key'] = api_key
+    if not html_body:
+        print("HTML vazio — pulando envio (extra).")
+        return
+
+    cfg = Configuration()
+    cfg.api_key["api-key"] = api_key
     api = TransactionalEmailsApi(ApiClient(configuration=cfg))
+
     for dest in destinatarios:
         try:
             api.send_transac_email(SendSmtpEmail(
                 to=[{"email": dest}],
                 sender={"email": sender_email},
-                subject=titulo,
-                html_content=html
+                subject=subject,
+                html_content=html_body
             ))
             print(f"✅ [DOU EXTRA] E-mail enviado para {dest}")
         except (ApiException, Exception) as e:
             print(f"❌ Falha ao enviar (extra) para {dest}: {e}")
 
-# Execução principal
+
 if __name__ == "__main__":
     conteudo = raspa_dou_extra()
 
-    # 1) Planilha geral
-    geral = procura_termos(conteudo)
-    qtd_geral = salva_na_base(geral)
+    geral = procura_termos_geral(conteudo)
+    _qtd_geral, inserted_general, _sh_geral, ws_geral = salva_geral_dedupe(geral)
 
-    # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
-    qtd_clientes = salva_por_cliente(por_cliente)
+    _qtd_clientes, inserted_clients_map, _sh_cli, _client_gids = salva_por_cliente(por_cliente)
 
-    # 3) E-mail só se houve algo novo
-    envia_email_brevo_extra(geral, qtd_clientes, qtd_geral)
+    planilha_id = os.getenv("PLANILHA") or ""
+    planilha_clientes_id = os.getenv("PLANILHA_CLIENTES") or ""
+    planilha_gid = _ws_gid(ws_geral) if ws_geral else None
+
+    envia_email_brevo_extra_minimo(
+        inserted_general=inserted_general,
+        inserted_clients_map=inserted_clients_map,
+        planilha_id=planilha_id,
+        planilha_gid=planilha_gid,
+        planilha_clientes_id=planilha_clientes_id,
+    )
