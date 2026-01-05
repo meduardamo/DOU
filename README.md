@@ -1,10 +1,6 @@
 # DOU
 
-Coleta e organização de publicações do Diário Oficial da União (DOU), incluindo:
-- raspagem do DOU (rotina principal)
-- captura/atualização de edições extras
-- etapa de “alinhamento”
-- escrita/atualização em Google Sheets
+Raspagem do Diário Oficial da União (DOU) e atualização em Google Sheets, incluindo edições extras e uma etapa auxiliar de alinhamento.
 
 ## Arquivos principais
 - `raspagemdou.py`: rotina principal de raspagem do DOU
