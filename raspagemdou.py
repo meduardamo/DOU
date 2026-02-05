@@ -195,7 +195,7 @@ def raspa_dou(data=None, secoes=("do1", "do2")):
 
             for it in arr:
                 if isinstance(it, dict):
-                    it["secao"] = sec.upper()  # DO1/DO2
+                    it["secao"] = sec.upper()
 
             combined["jsonArray"].extend(arr)
             print(f"[{sec.upper()}] itens: {len(arr)}")
@@ -230,6 +230,9 @@ PALAVRAS_GERAIS = [
     'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
     'Exposição a Fatores de Risco','Departamento de Saúde Mental',
     'Hipertensão Arterial','Alimentação Escolar','PNAE','Agora Tem Especialistas',
+        
+    # Alfabetização
+
     'Alfabetização','Alfabetização na Idade Certa','Criança Alfabetizada','Meta de Alfabetização',
     'Plano Nacional de Alfabetização','Programa Criança Alfabetizada','Idade Certa para Alfabetização',
     'Alfabetização de Crianças','Alfabetização Inicial','Alfabetização Plena',
@@ -237,6 +240,9 @@ PALAVRAS_GERAIS = [
     'Programa Nacional de Alfabetização na Idade Certa','Pacto pela Alfabetização',
     'Política Nacional de Alfabetização','Recomposição das Aprendizagens em Alfabetização',
     'Competências de Alfabetização','Avaliação da Alfabetização','Saeb Alfabetização',
+    
+    # Matemática
+
     'Alfabetização Matemática','Analfabetismo Matemático','Aprendizagem em Matemática',
     'Recomposição das Aprendizagens em Matemática','Recomposição de Aprendizagem',
     'Competências Matemáticas','Proficiência em Matemática',
@@ -264,7 +270,7 @@ def procura_termos(conteudo_raspado):
         resumo   = resultado.get('content', '')
         link     = URL_BASE + resultado.get('urlTitle', '')
         data_pub = (resultado.get('pubDate', '') or '')[:10]
-        secao    = (resultado.get('secao') or '').strip()  # DO1/DO2
+        secao    = (resultado.get('secao') or '').strip()
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -289,11 +295,11 @@ def procura_termos(conteudo_raspado):
 
                 resultados_por_palavra[palavra].append({
                     'date': data_pub,
-                    'secao': secao,  # DO1/DO2
                     'title': titulo,
                     'href': link,
                     'abstract': resumo,
-                    'content_page': conteudo_pagina
+                    'content_page': conteudo_pagina,
+                    'secao': secao
                 })
                 algum = True
 
@@ -315,11 +321,11 @@ FMCSV|Primeira infância|Criança; Infância; infanto-juvenil; educação básic
 IEPS|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; público; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; emendas parlamentares; Ministério da Saúde; Trabalhadores e profissionais de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Gestão de recursos humanos em saúde; Formação de recursos humanos em saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; planos de saúde; seguros; seguradoras; planos populares; Anvisa; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Economia solidária em saúde mental; Pessoa em situação de rua; saúde mental; Fiscalização de comunidades terapêuticas; Rede de atenção psicossocial; RAPS; unidades de acolhimento; assistência multiprofissional; centros de convivência; Cannabis; canabidiol; tratamento terapêutico; Desinstitucionalização; manicômios; hospitais de custódia; Saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; Dependência química; vícios; ludopatia; Treinamento em saúde mental; capacitação em saúde mental; Intervenções terapêuticas em saúde mental; Internet e redes sociais na saúde mental; Violência psicológica; Surto psicótico
 Manual|Saúde|Ozempic; Wegovy; Mounjaro; Telemedicina; Telessaúde; CBD; Cannabis Medicinal; CFM; Conselho Federal de Medicina; Farmácia Magistral; Medicamentos Manipulados; Minoxidil; Emagrecedores; Retenção de receita de medicamentos; tirzepatida; liraglutida
 Mevo|Saúde|Prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; autonomia da ANPD; Acesso e uso de dados; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do SUS; venda e distribuição de medicamentos; Bula digital; Atesta CFM; SNGPC; Farmacêutico Remoto; Medicamentos Isentos de Prescrição (MIPs); RNDS - Rede Nacional de Dados em Saúde; Interoperabilidade; Substâncias sob controle especial; Tabela SUS; Saúde digital; SEIDIGI; ICP - Brasil; Farmácia popular; CMED
-Umane|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; público; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; emendas parlamentares; Ministério da Saúde; Trabalhadores e profissionais de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Gestão de recursos humanos em saúde; Formação profissional de saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; planos de saúde; seguros; seguradoras; planos populares; Anvisa; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Conass; Conasems
+Umane|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; público; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; emendas e orçamento da saúde; Ministério da Saúde; Trabalhadores e profissionais de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Gestão de recursos humanos em saúde; Formação profissional de saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; planos de saúde; seguros; seguradoras; planos populares; Anvisa; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Conass; Conasems
 Cactus|Saúde|Saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; Rede de atenção psicossocial; RAPS; CAPS; Centro de Apoio Psicossocial; programa saúde na escola; bullying; cyberbullying; eca digital
 Vital|Saúde|Saúde mental; Dados para a saúde; Morte evitável; Doenças crônicas não transmissíveis; Rotulagem de bebidas alcoólicas; Educação em saúde; Bebidas alcoólicas; Imposto seletivo; Rotulagem de alimentos; Alimentos ultraprocessados; Publicidade infantil; Publicidade de alimentos ultraprocessados; Tributação de bebidas alcoólicas; Alíquota de bebidas alcoólicas; Cigarro eletrônico; Controle de tabaco; Violência doméstica; Exposição a fatores de risco; Departamento de Saúde Mental; Hipertensão arterial; Saúde digital; Violência contra crianças; Violência contra mulheres; Feminicídio; COP 30
 Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; Resolução 258 Conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
-IDEC|Saúde|Defesa do consumidor; Ação Civil Pública; Arbitragem; SAC; Concorrência; Reforma Tributária; Ultraprocessados; Doenças crônicas não transmissíveis (DCNTs); Obesidade; Codex Alimentarius; Gordura trans; Adoçantes/edulcorantes; Rotulagem de alimentos; Transgênicos; Organismos geneticamente modificados (OGMs); Marketing e publicidade de alimentos; Comunicação mercadológica; Escolas e alimentação escolar; Bebidas açucaradas/refrigerantes; Programa Nacional de Alimentação Escolar (PNAE); Educação Alimentar e Nutricional (EAN); Agrotóxicos/pesticidas/defensivos fitossanitários; Orgânicos; Tributação de alimentos não saudáveis; Desertos alimentares; Desperdício de alimentos; Segurança Alimentar e Nutricional (SAN); Direito Humano à Alimentação; Fome; Sustentabilidade; Mudança climática; Plástico; Gestão de resíduos; Economia circular; Desmatamento; Greenwashing; Energia elétrica; Encargos tarifários; Subsídios na tarifa de energia; Descontos na tarifa de energia; Energia pré-paga; Abertura do mercado de energia para consumidor cativo; Mercado livre de energia; Qualidade do serviço de energia; Tarifa Social de Energia Elétrica; Geração térmica; Combustíveis fósseis; Transição energética; Descarbonização da matriz elétrica; Gases de efeito estufa; Acordo de Paris; Objetivos do Desenvolvimento Sustentável; Reestruturação do setor de energia; Reforma do setor elétrico; Modernização do setor elétrico; Itens de custo da tarifa de energia elétrica; Universalização do acesso à energia; Eficiência energética; Geração distribuída; Carvão mineral; Painel solar; Crédito imobiliário; Crédito consignado; Publicidade de crédito; Cartão de crédito; pagamento de fatura; parcelamento com e sem juros; Cartões pré-pagos; Programas de fidelidade; Cheque especial; Taxa de juros; Contrato de crédito; Endividamento de jovens; Crédito estudantil; Endividamento de idosos; Crédito por meio de aplicativos; Abertura e movimentação de conta bancária; Cobrança de serviços sem autorização; Cadastro Positivo; Contratação de serviços bancários com imposição de seguros e títulos de capitalização; Acessibilidade aos canais de serviços bancários; caixa eletrônico; agências; internet banking; aplicativos móveis; Contratação de pacotes de contas bancárias; Acesso à informação em caso de negativa de crédito; Plano de saúde; Saúde suplementar; Medicamentos isentos de prescrição (MIP); Medicamentos antibióticos/antimicrobianos; Propriedade intelectual; Patentes; Licença compulsória; Preços de medicamentos; Complexo Econômico-Industrial da Saúde; Saúde digital; Prontuário eletrônico; Rede Nacional de Dados em Saúde (RNDS); DATASUS; Proteção de dados pessoais; Telessaúde; Telecomunicações; Internet; TV por assinatura; Serviço de Acesso Condicionado (SeAC); Telefonia móvel; Telefonia fixa; TV digital; Lei Geral de Proteção de Dados (LGPD); Autoridade Nacional de Proteção de Dados (ANPD); Reconhecimento facial; Lei Geral de Telecomunicações; Bens reversíveis; Fundo de Universalização dos Serviços de Telecomunicações (FUST); Provedores de acesso; Franquia de dados; Marco Civil da Internet; Neutralidade de rede/zero rating; Privacidade; Lei de Acesso à Informação; Regulação de plataformas digitais; Desinformação; Fake news; Dados biométricos; Vazamento de dados; Telemarketing; Serviço de Valor Adicionado (SVA)
+IDEC|Saúde|Defesa do consumidor; Ação Civil Pública; Arbitragem; SAC; Concorrência; Reforma Tributária; Ultraprocessados; Doenças crônicas não transmissíveis (DCNTs); Obesidade; Codex Alimentarius; Gordura trans; Adoçantes/edulcorantes; Rotulagem de alimentos; Transgênicos; Organismos geneticamente modificados (OGMs); Marketing e publicidade de alimentos; Comunicação mercadológica; Escolas e alimentação escolar; Bebidas açucaradas/refrigerantes; Programa Nacional de Alimentação Escolar (PNAE); Educação Alimentar e Nutricional (EAN); Agrotóxicos/pesticidas/defensivos fitossanitários; Orgânicos; Tributação de alimentos não saudáveis; Desertos alimentares; Desperdício de alimentos; Segurança Alimentar e Nutricional (SAN); Direito Humano à Alimentação; Fome; Sustentabilidade; Mudança climática; Plástico; Gestão de resíduos; Economia circular; Desmatamento; Greenwashing; Energia elétrica; Encargos tarifários; Subsídios na tarifa de energia; Descontos na tarifa de energia; Energia pré-paga; Abertura do mercado de energia para consumidor cativo; Mercado livre de energia; Qualidade do serviço de energia; Tarifa Social de Energia Elétrica; Geração térmica; Combustíveis fósseis; Transição energética; Descarbonização da matriz elétrica; Acordo de Paris; Objetivos do Desenvolvimento Sustentável; Reestruturação do setor de energia; Reforma do setor elétrico; Modernização do setor elétrico; Itens de custo da tarifa de energia elétrica; Universalização do acesso à energia; Eficiência energética; Geração distribuída; Carvão mineral; Painel solar; Crédito imobiliário; Crédito consignado; Publicidade de crédito; Cartão de crédito; pagamento de fatura; parcelamento com e sem juros; Cartões pré-pagos; Programas de fidelidade; Cheque especial; Taxa de juros; Contrato de crédito; Endividamento de jovens; Crédito estudantil; Endividamento de idosos; Crédito por meio de aplicativos; Abertura e movimentação de conta bancária; Cobrança de serviços sem autorização; Cadastro Positivo; Contratação de serviços bancários com imposição de seguros e títulos de capitalização; Acessibilidade aos canais de serviços bancários; caixa eletrônico; agências; internet banking; aplicativos móveis; Contratação de pacotes de contas bancárias; Acesso à informação em caso de negativa de crédito; Plano de saúde; Saúde suplementar; Medicamentos isentos de prescrição (MIP); Medicamentos antibióticos/antimicrobianos; Propriedade intelectual; Patentes; Licença compulsória; Preços de medicamentos; Complexo Econômico-Industrial da Saúde; Saúde digital; Prontuário eletrônico; Rede Nacional de Dados em Saúde (RNDS); DATASUS; Proteção de dados pessoais; Telessaúde; Telecomunicações; Internet; TV por assinatura; Serviço de Acesso Condicionado (SeAC); Telefonia móvel; Telefonia fixa; TV digital; Lei Geral de Proteção de Dados (LGPD); Autoridade Nacional de Proteção de Dados (ANPD); Reconhecimento facial; Lei Geral de Telecomunicações; Bens reversíveis; Fundo de Universalização dos Serviços de Telecomunicações (FUST); Provedores de acesso; Franquia de dados; Marco Civil da Internet; Neutralidade de rede/zero rating; Privacidade; Lei de Acesso à Informação; Regulação de plataformas digitais; Desinformação; Fake news; Dados biométricos; Vazamento de dados; Telemarketing; Serviço de Valor Adicionado (SVA)
 """.strip()
 
 def _parse_client_keywords(text: str):
@@ -358,7 +364,7 @@ def procura_termos_clientes(conteudo_raspado):
         resumo   = r.get('content', '')
         link     = URL_BASE + r.get('urlTitle', '')
         data_pub = (r.get('pubDate', '') or '')[:10]
-        secao    = (r.get('secao') or '').strip()  # DO1/DO2
+        secao    = (r.get('secao') or '').strip()
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -382,13 +388,15 @@ def procura_termos_clientes(conteudo_raspado):
 
                 por_cliente[cliente].append([
                     data_pub,
-                    secao,       # <- DO1/DO2 (coluna "Seção")
                     cliente,
                     kw,
                     titulo,
                     link,
                     resumo,
-                    conteudo_pagina
+                    conteudo_pagina,
+                    "",
+                    "",
+                    secao
                 ])
 
     return por_cliente
@@ -411,14 +419,34 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-COLS_GERAL   = ["Data","Seção","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
-COLS_CLIENTE = ["Data","Seção","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa"]
+COLS_GERAL = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Seção"]
+
+# IMPORTANTE: manter igual sua planilha (Data, Cliente, Palavra-chave, Portaria, Link, ...)
+COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa","Seção"]
 
 def _ensure_header(ws, header):
-    first = ws.row_values(1)
-    if first != header:
+    current = ws.row_values(1)
+
+    if not current:
         ws.resize(rows=max(2, ws.row_count), cols=len(header))
-        ws.update('1:1', [header])
+        ws.update("1:1", [header])
+        return
+
+    if current == header:
+        return
+
+    # Se já está tudo igual e só falta "Seção" no fim
+    if current == header[:-1]:
+        ws.resize(rows=max(2, ws.row_count), cols=len(header))
+        ws.update_cell(1, len(header), header[-1])
+        return
+
+    # Divergência real: não reordena nem reescreve header; só garante que exista "Seção" no final
+    if "Seção" not in current:
+        new_col = len(current) + 1
+        ws.resize(rows=max(2, ws.row_count), cols=max(ws.col_count, new_col))
+        ws.update_cell(1, new_col, "Seção")
+
 
 def salva_na_base(palavras_raspadas):
     if not palavras_raspadas:
@@ -443,12 +471,12 @@ def salva_na_base(palavras_raspadas):
         for item in lista:
             rows_to_append.append([
                 item.get('date',''),
-                item.get('secao',''),
                 palavra,
                 item.get('title',''),
                 item.get('href',''),
                 item.get('abstract',''),
-                item.get('content_page','')
+                item.get('content_page',''),
+                item.get('secao','')
             ])
 
     if rows_to_append:
@@ -565,7 +593,7 @@ def envia_email_geral(palavras_raspadas):
             for r in lista:
                 link = r.get('href', '#')
                 title = r.get('title', '(sem título)')
-                secao = (r.get('secao') or '').strip()  # DO1/DO2
+                secao = (r.get('secao') or '').strip()
                 prefix = f"[{secao}] " if secao else ""
                 parts.append(f"<li>{prefix}<a href='{link}'>{title}</a></li>")
             parts.append("</ul>")
@@ -610,7 +638,7 @@ def envia_email_clientes(por_cliente: dict):
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        kw_counts = Counter(r[3] for r in rows)  # kw idx 3
+        kw_counts = Counter(r[2] for r in rows)  # Palavra-chave idx 2
         top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
         sum_rows.append((cliente, len(rows), top_kw))
     sum_rows.sort(key=lambda t: t[1], reverse=True)
@@ -637,16 +665,16 @@ def envia_email_clientes(por_cliente: dict):
         parts.append(f"<h2 id='{anchor}'>{cliente}</h2>")
         agrupados = {}
         for r in rows:
-            kw = r[3]
+            kw = r[2]
             agrupados.setdefault(kw, []).append(r)
 
         for kw, lista in sorted(agrupados.items(), key=lambda kv: len(kv[1]), reverse=True):
             parts.append(f"<h3>Palavra-chave: {kw} — {len(lista)} ocorrência(s)</h3><ul>")
             for item in lista:
-                secao_item = (item[1] or "").strip()    # Seção idx 1
-                titulo_item = item[4] or "(sem título)" # Portaria idx 4
-                link = item[5]                          # Link idx 5
-                resumo = (item[6] or "").strip()        # Resumo idx 6
+                secao_item = (item[-1] or "").strip()
+                titulo_item = item[3] or "(sem título)"  # Portaria idx 3
+                link = item[4]                           # Link idx 4
+                resumo = (item[5] or "").strip()         # Resumo idx 5
                 prefix = f"[{secao_item}] " if secao_item else ""
                 parts.append(
                     f"<li>{prefix}<a href='{link}' target='_blank'>{titulo_item}</a>"
@@ -673,7 +701,7 @@ def envia_email_clientes(por_cliente: dict):
 
 # Execução principal
 if __name__ == "__main__":
-    conteudo = raspa_dou()  # DO1+DO2
+    conteudo = raspa_dou()
 
     geral = procura_termos(conteudo)
     salva_na_base(geral)
