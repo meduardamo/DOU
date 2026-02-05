@@ -28,7 +28,7 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
 
-# BLOQUEIO DE MENÇÕES (CREF/CONFEF) + CNE/CES
+# BLOQUEIO DE MENÇÕES (CREF/CONFEF) + CNE/CES + Educação Superior + Acórdão + Novo PAC + decisões de casos particulares + Registro Especial
 EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Regional de Educação Física"),
     _wholeword_pattern("Conselho Federal de Educação Física"),
@@ -36,6 +36,35 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Federal de Educacao Fisica"),
     re.compile(r"\bCREF\b", re.I),
     re.compile(r"\bCONFEF\b", re.I),
+
+    # Educação superior
+    _wholeword_pattern("Educação Superior"),
+    _wholeword_pattern("Educacao Superior"),
+    _wholeword_pattern("Ensino Superior"),
+    _wholeword_pattern("Instituição de Ensino Superior"),
+    _wholeword_pattern("Instituicao de Ensino Superior"),
+    re.compile(r"\bIES\b", re.I),
+    _wholeword_pattern("Credenciamento"),
+    _wholeword_pattern("Recredenciamento"),
+    _wholeword_pattern("Autorização de curso"),
+    _wholeword_pattern("Autorizacao de curso"),
+    _wholeword_pattern("Reconhecimento de curso"),
+    _wholeword_pattern("Renovação de reconhecimento"),
+    _wholeword_pattern("Renovacao de reconhecimento"),
+
+    # Acórdão
+    _wholeword_pattern("Acórdão"),
+    _wholeword_pattern("Acordao"),
+    re.compile(r"\bac[oó]rd[aã]o\b", re.I),
+
+    # Novo PAC
+    _wholeword_pattern("Novo PAC"),
+    _wholeword_pattern("Novo Programa de Aceleração do Crescimento"),
+    _wholeword_pattern("Novo Programa de Aceleracao do Crescimento"),
+
+    # Registro Especial (genérico)
+    _wholeword_pattern("Registro Especial"),
+    re.compile(r"\bregesp\b", re.I),
 ]
 
 # CNE
@@ -52,6 +81,21 @@ _CES_PATTERNS = [
     re.compile(r"\bCES\b", re.I),
 ]
 
+# Decisões/pedidos de casos particulares
+_DECISAO_CASE_REGEX = re.compile(
+    r"\b("
+    r"defiro|indefiro|deferido|indeferido|homologo|homologar|concedo|conceder|"
+    r"autorizo|autorizar|reconheco|reconhecer|recredencio|recredenciar|"
+    r"credencio|credenciar|reconhecido|credenciado|recredenciado|"
+    r"aprovado|aprovo|aprovar|nego\s+provimento|dou\s+provimento|"
+    r"julgo|julgar|decido|decidir"
+    r")\b.*\b("
+    r"pedido|requerimento|processo|interessado|interessada|"
+    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
+    r")\b",
+    re.I
+)
+
 def _has_any(text_norm: str, patterns: list[re.Pattern]) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
@@ -67,6 +111,9 @@ def _is_blocked(text: str) -> bool:
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
 
+    if _DECISAO_CASE_REGEX.search(nt):
+        return True
+
     return False
 
 
@@ -74,24 +121,41 @@ def _is_blocked(text: str) -> bool:
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
-    "declara a inscricao", "concede o registro",
-    "drf", "srrf", "defis", "efi2vit", "regesp",
+    "regesp",
+    "defis",
+    "srrf",
+    "drf",
+    "efi2vit",
     "delegacia da receita federal",
-    "cnpj", "ncm", "mapa",
-    "engarrafador", "produtor", "importador",
-    "marcas comerciais", "atualiza as marcas"
+    "cnpj",
+    "ncm",
+    "mapa",
+    "engarrafador",
+    "produtor",
+    "importador",
+    "marcas comerciais",
+    "atualiza as marcas"
 ]
 
 _BEBIDAS_WHITELIST_TERMS = [
-    "lei", "decreto", "projeto de lei",
-    "consulta publica", "audiencia publica",
-    "campanha", "advertencia",
-    "rotulagem", "publicidade", "propaganda",
-    "tributacao", "aliquota",
+    "lei",
+    "decreto",
+    "projeto de lei",
+    "consulta publica",
+    "audiencia publica",
+    "campanha",
+    "advertencia",
+    "rotulagem",
+    "publicidade",
+    "propaganda",
+    "tributacao",
+    "aliquota",
     "saude publica",
-    "controle de consumo", "controle de oferta",
+    "controle de consumo",
+    "controle de oferta",
     "pontos de venda",
-    "seguranca viaria", "alcool e direcao",
+    "seguranca viaria",
+    "alcool e direcao",
     "monitoramento"
 ]
 
@@ -100,6 +164,49 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
         return False
     if any(t in nt for t in _BEBIDAS_EXCLUDE_TERMS):
+        return True
+    return False
+
+
+# Bloqueio genérico: atos/portarias de concessão/decisão individual (empresa/processo)
+_ATO_EMPRESA_EXCLUDE_TERMS = [
+    "ato declaratorio executivo",
+    "registro especial",
+    "regesp",
+    "defis",
+    "srrf",
+    "drf",
+    "cnpj",
+    "ncm",
+    "importador",
+    "exportador",
+    "engarrafador",
+    "produtor",
+    "estabelecimentos comerciais atacadistas",
+    "cooperativas de produtores",
+    "delegacia da receita federal",
+]
+
+_ATO_EMPRESA_DECISAO_REGEX = re.compile(
+    r"\b("
+    r"concede|conceder|defiro|indefiro|deferido|indeferido|"
+    r"autoriza|autorizar|homologo|homologar|"
+    r"credencio|credenciar|recredencio|recredenciar|"
+    r"reconheco|reconhecer|aprovo|aprovar|"
+    r"torna\s+publico\s+o\s+resultado"
+    r")\b.*\b("
+    r"registro\s+especial|regesp|"
+    r"pedido|requerimento|processo|interessad[oa]|"
+    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
+    r")\b",
+    re.I
+)
+
+def _is_ato_decisao_empresa_irrelevante(texto_bruto: str) -> bool:
+    nt = _normalize_ws(texto_bruto)
+    if _ATO_EMPRESA_DECISAO_REGEX.search(nt):
+        return True
+    if any(t in nt for t in _ATO_EMPRESA_EXCLUDE_TERMS):
         return True
     return False
 
@@ -230,9 +337,8 @@ PALAVRAS_GERAIS = [
     'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
     'Exposição a Fatores de Risco','Departamento de Saúde Mental',
     'Hipertensão Arterial','Alimentação Escolar','PNAE','Agora Tem Especialistas',
-        
-    # Alfabetização
 
+    # Alfabetização
     'Alfabetização','Alfabetização na Idade Certa','Criança Alfabetizada','Meta de Alfabetização',
     'Plano Nacional de Alfabetização','Programa Criança Alfabetizada','Idade Certa para Alfabetização',
     'Alfabetização de Crianças','Alfabetização Inicial','Alfabetização Plena',
@@ -240,9 +346,8 @@ PALAVRAS_GERAIS = [
     'Programa Nacional de Alfabetização na Idade Certa','Pacto pela Alfabetização',
     'Política Nacional de Alfabetização','Recomposição das Aprendizagens em Alfabetização',
     'Competências de Alfabetização','Avaliação da Alfabetização','Saeb Alfabetização',
-    
-    # Matemática
 
+    # Matemática
     'Alfabetização Matemática','Analfabetismo Matemático','Aprendizagem em Matemática',
     'Recomposição das Aprendizagens em Matemática','Recomposição de Aprendizagem',
     'Competências Matemáticas','Proficiência em Matemática',
@@ -290,6 +395,11 @@ def procura_termos(conteudo_raspado):
 
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
+
+                alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                if _is_ato_decisao_empresa_irrelevante(alltxt):
+                    continue
+
                 if _is_blocked(conteudo_pagina):
                     continue
 
@@ -383,6 +493,11 @@ def procura_termos_clientes(conteudo_raspado):
 
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
+
+                alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                if _is_ato_decisao_empresa_irrelevante(alltxt):
+                    continue
+
                 if _is_blocked(conteudo_pagina):
                     continue
 
@@ -435,13 +550,11 @@ def _ensure_header(ws, header):
     if current == header:
         return
 
-    # Se já está tudo igual e só falta "Seção" no fim
     if current == header[:-1]:
         ws.resize(rows=max(2, ws.row_count), cols=len(header))
         ws.update_cell(1, len(header), header[-1])
         return
 
-    # Divergência real: não reordena nem reescreve header; só garante que exista "Seção" no final
     if "Seção" not in current:
         new_col = len(current) + 1
         ws.resize(rows=max(2, ws.row_count), cols=max(ws.col_count, new_col))
@@ -638,7 +751,7 @@ def envia_email_clientes(por_cliente: dict):
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        kw_counts = Counter(r[2] for r in rows)  # Palavra-chave idx 2
+        kw_counts = Counter(r[2] for r in rows)
         top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
         sum_rows.append((cliente, len(rows), top_kw))
     sum_rows.sort(key=lambda t: t[1], reverse=True)
@@ -672,9 +785,9 @@ def envia_email_clientes(por_cliente: dict):
             parts.append(f"<h3>Palavra-chave: {kw} — {len(lista)} ocorrência(s)</h3><ul>")
             for item in lista:
                 secao_item = (item[-1] or "").strip()
-                titulo_item = item[3] or "(sem título)"  # Portaria idx 3
-                link = item[4]                           # Link idx 4
-                resumo = (item[5] or "").strip()         # Resumo idx 5
+                titulo_item = item[3] or "(sem título)"
+                link = item[4]
+                resumo = (item[5] or "").strip()
                 prefix = f"[{secao_item}] " if secao_item else ""
                 parts.append(
                     f"<li>{prefix}<a href='{link}' target='_blank'>{titulo_item}</a>"
@@ -710,5 +823,3 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
-
