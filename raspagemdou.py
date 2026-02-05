@@ -56,25 +56,21 @@ def _has_any(text_norm: str, patterns: list[re.Pattern]) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 def _is_blocked(text: str) -> bool:
-    # Retorna True se o texto contiver menções bloqueadas
     if not text:
         return False
     nt = _normalize_ws(text)
 
-    # 1) bloqueios diretos (CREF/CONFEF)
     for pat in EXCLUDE_PATTERNS:
         if pat and pat.search(nt):
             return True
 
-    # 2) decisões do CNE que tratem da CES (coocorrência)
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
 
     return False
 
 
-# Filtro específico para "Bebidas Alcoólicas": corta atos/portarias de registro/autorização,
-# mas mantém políticas públicas e regulação ampla.
+# Filtro específico para "Bebidas Alcoólicas"
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -100,19 +96,16 @@ _BEBIDAS_WHITELIST_TERMS = [
 ]
 
 def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
-    # normaliza para busca robusta
     nt = _normalize_ws(texto_bruto)
-    # whitelist prioriza manter políticas/regulação
     if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
         return False
-    # termos fortes de ato cadastral/registro
     if any(t in nt for t in _BEBIDAS_EXCLUDE_TERMS):
         return True
     return False
 
 
 # Coleta do conteúdo completo da página do DOU
-CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))  # limite de caracteres
+CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))
 _CONTENT_CACHE: dict[str, str] = {}
 
 _HDR = {
@@ -176,28 +169,47 @@ def _baixar_conteudo_pagina(url: str) -> str:
         return ""
 
 
-# Raspagem do DOU (capa do dia)
-def raspa_dou(data=None):
+# Raspagem do DOU (DO1 + DO2) e coluna "secao" (DO1/DO2 em maiúsculo)
+def raspa_dou(data=None, secoes=("do1", "do2")):
     if data is None:
         data = datetime.now().strftime('%d-%m-%Y')
-    print(f'Raspando as notícias do dia {data}...')
-    try:
-        url = f'http://www.in.gov.br/leiturajornal?data={data}'
-        page = requests.get(url, timeout=40, headers=_HDR)
-        page.raise_for_status()
-        soup = BeautifulSoup(page.text, 'html.parser')
-        params = soup.find("script", {"id": "params"})
-        if params:
-            print('Notícias raspadas.')
-            return json.loads(params.text)
-        print("Elemento <script id='params'> não encontrado.")
-        return None
-    except requests.RequestException as e:
-        print(f"Erro ao fazer a requisição: {e}")
-        return None
-    except json.JSONDecodeError as e:
-        print(f"Erro ao decodificar JSON: {e}")
-        return None
+
+    print(f'Raspando as notícias do dia {data} nas seções: {", ".join([s.upper() for s in secoes])}...')
+
+    combined = {"jsonArray": []}
+
+    for sec in secoes:
+        try:
+            url = f'http://www.in.gov.br/leiturajornal?data={data}&secao={sec}'
+            page = requests.get(url, timeout=40, headers=_HDR)
+            page.raise_for_status()
+
+            soup = BeautifulSoup(page.text, 'html.parser')
+            params = soup.find("script", {"id": "params"})
+            if not params:
+                print(f"[{sec.upper()}] Elemento <script id='params'> não encontrado.")
+                continue
+
+            j = json.loads(params.text)
+            arr = j.get("jsonArray", []) or []
+
+            for it in arr:
+                if isinstance(it, dict):
+                    it["secao"] = sec.upper()  # DO1/DO2
+
+            combined["jsonArray"].extend(arr)
+            print(f"[{sec.upper()}] itens: {len(arr)}")
+
+        except Exception as e:
+            print(f"Erro ao raspar seção {sec.upper()}: {e}")
+            continue
+
+    if combined["jsonArray"]:
+        print(f"Total de itens coletados: {len(combined['jsonArray'])}")
+        return combined
+
+    print("Nenhum item encontrado em DO1/DO2.")
+    return None
 
 
 # Palavras gerais (planilha geral)
@@ -218,7 +230,6 @@ PALAVRAS_GERAIS = [
     'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
     'Exposição a Fatores de Risco','Departamento de Saúde Mental',
     'Hipertensão Arterial','Alimentação Escolar','PNAE','Agora Tem Especialistas',
-    # Alfabetização
     'Alfabetização','Alfabetização na Idade Certa','Criança Alfabetizada','Meta de Alfabetização',
     'Plano Nacional de Alfabetização','Programa Criança Alfabetizada','Idade Certa para Alfabetização',
     'Alfabetização de Crianças','Alfabetização Inicial','Alfabetização Plena',
@@ -226,7 +237,6 @@ PALAVRAS_GERAIS = [
     'Programa Nacional de Alfabetização na Idade Certa','Pacto pela Alfabetização',
     'Política Nacional de Alfabetização','Recomposição das Aprendizagens em Alfabetização',
     'Competências de Alfabetização','Avaliação da Alfabetização','Saeb Alfabetização',
-    # Matemática
     'Alfabetização Matemática','Analfabetismo Matemático','Aprendizagem em Matemática',
     'Recomposição das Aprendizagens em Matemática','Recomposição de Aprendizagem',
     'Competências Matemáticas','Proficiência em Matemática',
@@ -254,6 +264,7 @@ def procura_termos(conteudo_raspado):
         resumo   = resultado.get('content', '')
         link     = URL_BASE + resultado.get('urlTitle', '')
         data_pub = (resultado.get('pubDate', '') or '')[:10]
+        secao    = (resultado.get('secao') or '').strip()  # DO1/DO2
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -264,7 +275,6 @@ def procura_termos(conteudo_raspado):
         for palavra, patt in _PATTERNS_GERAL:
             if patt and patt.search(texto_norm):
 
-                # filtro novo para "Bebidas Alcoólicas"
                 if palavra.strip().lower() == "bebidas alcoólicas":
                     if conteudo_pagina is None:
                         conteudo_pagina = _baixar_conteudo_pagina(link)
@@ -276,8 +286,10 @@ def procura_termos(conteudo_raspado):
                     conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_blocked(conteudo_pagina):
                     continue
+
                 resultados_por_palavra[palavra].append({
                     'date': data_pub,
+                    'secao': secao,  # DO1/DO2
                     'title': titulo,
                     'href': link,
                     'abstract': resumo,
@@ -300,7 +312,7 @@ IU|Educação|Gestão Educacional; Diretores escolares; Magistério; Professores
 Reúna|Educação|Matemática; Alfabetização; Alfabetização Matemática; Recomposição de aprendizagem; Plano Nacional de Educação; Emendas parlamentares educação
 REMS|Esportes|Esporte; Esporte e Desenvolvimento Social; Plano Nacional de Esporte; Lei de Incentivo ao Esporte; Sistema Nacional de Esporte; Conselho Nacional de Esporte; Esporte e Educação; Esporte e Saúde; Esporte para Toda a Vida; Esporte Amador
 FMCSV|Primeira infância|Criança; Infância; infanto-juvenil; educação básica; PNE; FNDE; Fundeb; VAAR; VAAT; educação infantil; maternidade; paternidade; alfabetização; creche; pré-escola; parentalidade; materno-infantil; infraestrutura escolar; política nacional de cuidados; Plano Nacional de Educação; Bolsa Família; Conanda; visitação domiciliar; Homeschooling; Política Nacional Integrada da Primeira Infância
-IEPS|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; público; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; emendas parlamentares; Ministério da Saúde; Trabalhadores e profissionais de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Gestão de recursos humanos em saúde; Formação profissional de saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; planos de saúde; seguros; seguradoras; planos populares; Anvisa; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Economia solidária em saúde mental; Pessoa em situação de rua; saúde mental; Fiscalização de comunidades terapêuticas; Rede de atenção psicossocial; RAPS; unidades de acolhimento; assistência multiprofissional; centros de convivência; Cannabis; canabidiol; tratamento terapêutico; Desinstitucionalização; manicômios; hospitais de custódia; Saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; Dependência química; vícios; ludopatia; Treinamento em saúde mental; capacitação em saúde mental; Intervenções terapêuticas em saúde mental; Internet e redes sociais na saúde mental; Violência psicológica; Surto psicótico
+IEPS|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; público; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; emendas parlamentares; Ministério da Saúde; Trabalhadores e profissionais de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Gestão de recursos humanos em saúde; Formação de recursos humanos em saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; planos de saúde; seguros; seguradoras; planos populares; Anvisa; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Economia solidária em saúde mental; Pessoa em situação de rua; saúde mental; Fiscalização de comunidades terapêuticas; Rede de atenção psicossocial; RAPS; unidades de acolhimento; assistência multiprofissional; centros de convivência; Cannabis; canabidiol; tratamento terapêutico; Desinstitucionalização; manicômios; hospitais de custódia; Saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; Dependência química; vícios; ludopatia; Treinamento em saúde mental; capacitação em saúde mental; Intervenções terapêuticas em saúde mental; Internet e redes sociais na saúde mental; Violência psicológica; Surto psicótico
 Manual|Saúde|Ozempic; Wegovy; Mounjaro; Telemedicina; Telessaúde; CBD; Cannabis Medicinal; CFM; Conselho Federal de Medicina; Farmácia Magistral; Medicamentos Manipulados; Minoxidil; Emagrecedores; Retenção de receita de medicamentos; tirzepatida; liraglutida
 Mevo|Saúde|Prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; autonomia da ANPD; Acesso e uso de dados; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do SUS; venda e distribuição de medicamentos; Bula digital; Atesta CFM; SNGPC; Farmacêutico Remoto; Medicamentos Isentos de Prescrição (MIPs); RNDS - Rede Nacional de Dados em Saúde; Interoperabilidade; Substâncias sob controle especial; Tabela SUS; Saúde digital; SEIDIGI; ICP - Brasil; Farmácia popular; CMED
 Umane|Saúde|SUS; Sistema Único de Saúde; fortalecimento; Universalidade; Equidade em saúde; populações vulneráveis; desigualdades sociais; Organização do SUS; gestão pública; políticas públicas em saúde; Governança do SUS; regionalização; descentralização; Regionalização em saúde; Políticas públicas em saúde; População negra em saúde; Saúde indígena; Povos originários; Saúde da pessoa idosa; envelhecimento ativo; Atenção Primária; Saúde da criança; Saúde do adolescente; Saúde da mulher; Saúde do homem; Saúde da pessoa com deficiência; Saúde da população LGBTQIA+; Financiamento da saúde; público; atenção primária; tripartite; orçamento; Emendas e orçamento da saúde; emendas parlamentares; Ministério da Saúde; Trabalhadores e profissionais de saúde; Força de trabalho em saúde; Recursos humanos em saúde; Gestão de recursos humanos em saúde; Formação profissional de saúde; Cuidados primários em saúde; Emergências climáticas e ambientais em saúde; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; Vigilância em saúde; epidemiológica; Emergência em saúde; estado de emergência; Saúde suplementar; planos de saúde; seguros; seguradoras; planos populares; Anvisa; ANS; Sandbox regulatório; Cartões e administradoras de benefícios em saúde; Conass; Conasems
@@ -346,6 +358,7 @@ def procura_termos_clientes(conteudo_raspado):
         resumo   = r.get('content', '')
         link     = URL_BASE + r.get('urlTitle', '')
         data_pub = (r.get('pubDate', '') or '')[:10]
+        secao    = (r.get('secao') or '').strip()  # DO1/DO2
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -355,7 +368,6 @@ def procura_termos_clientes(conteudo_raspado):
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
 
-                # filtro novo quando a KW do cliente é "Bebidas Alcoólicas"
                 if kw.strip().lower() == "bebidas alcoólicas":
                     if conteudo_pagina is None:
                         conteudo_pagina = _baixar_conteudo_pagina(link)
@@ -367,7 +379,18 @@ def procura_termos_clientes(conteudo_raspado):
                     conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_blocked(conteudo_pagina):
                     continue
-                por_cliente[cliente].append([data_pub, cliente, kw, titulo, link, resumo, conteudo_pagina])
+
+                por_cliente[cliente].append([
+                    data_pub,
+                    secao,       # <- DO1/DO2 (coluna "Seção")
+                    cliente,
+                    kw,
+                    titulo,
+                    link,
+                    resumo,
+                    conteudo_pagina
+                ])
+
     return por_cliente
 
 
@@ -388,8 +411,8 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-COLS_GERAL   = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
-COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa"]
+COLS_GERAL   = ["Data","Seção","Palavra-chave","Portaria","Link","Resumo","Conteúdo"]
+COLS_CLIENTE = ["Data","Seção","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa"]
 
 def _ensure_header(ws, header):
     first = ws.row_values(1)
@@ -420,6 +443,7 @@ def salva_na_base(palavras_raspadas):
         for item in lista:
             rows_to_append.append([
                 item.get('date',''),
+                item.get('secao',''),
                 palavra,
                 item.get('title',''),
                 item.get('href',''),
@@ -454,9 +478,12 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if len(all_vals) > 1:
         for r in all_vals[1:]:
             if len(r) > link_idx:
-                existing.add((r[link_idx].strip(),
-                              r[palavra_idx].strip() if len(r) > palavra_idx else "",
-                              r[cliente_idx].strip() if len(r) > cliente_idx else ""))
+                existing.add((
+                    r[link_idx].strip(),
+                    r[palavra_idx].strip() if len(r) > palavra_idx else "",
+                    r[cliente_idx].strip() if len(r) > cliente_idx else ""
+                ))
+
     new = [r for r in rows if (r[link_idx].strip(), r[palavra_idx].strip(), r[cliente_idx].strip()) not in existing]
     if not new:
         print(f"[{sheet_name}] nada novo.")
@@ -464,6 +491,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
 
     ws.insert_rows(new, row=2, value_input_option="USER_ENTERED")
     print(f"[{sheet_name}] +{len(new)} linhas.")
+
 
 def salva_por_cliente(por_cliente: dict):
     plan_id = os.getenv("PLANILHA_CLIENTES")
@@ -535,22 +563,27 @@ def envia_email_geral(palavras_raspadas):
         if lista:
             parts.append(f"<h2>{palavra}</h2><ul>")
             for r in lista:
-                link = r.get('href', '#'); title = r.get('title', '(sem título)')
-                parts.append(f"<li><a href='{link}'>{title}</a></li>")
+                link = r.get('href', '#')
+                title = r.get('title', '(sem título)')
+                secao = (r.get('secao') or '').strip()  # DO1/DO2
+                prefix = f"[{secao}] " if secao else ""
+                parts.append(f"<li>{prefix}<a href='{link}'>{title}</a></li>")
             parts.append("</ul>")
     parts.append("</body></html>")
     html = "".join(parts)
     for dest in destinatarios:
         try:
-            api.send_transac_email(SendSmtpEmail(to=[{"email": dest}],
-                                                sender={"email": sender_email},
-                                                subject=titulo, html_content=html))
+            api.send_transac_email(SendSmtpEmail(
+                to=[{"email": dest}],
+                sender={"email": sender_email},
+                subject=titulo,
+                html_content=html
+            ))
             print(f"✅ E-mail (geral) enviado para {dest}")
         except (ApiException, Exception) as e:
             print(f"❌ Falha ao enviar (geral) para {dest}: {e}")
 
 def envia_email_clientes(por_cliente: dict):
-    # não enviar e-mail se não houver nenhuma ocorrência, igual ao "geral"
     if not por_cliente or all(not (rows) for rows in por_cliente.values()):
         print("Sem resultados para enviar (clientes) — nenhuma ocorrência encontrada.")
         return
@@ -577,7 +610,7 @@ def envia_email_clientes(por_cliente: dict):
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        kw_counts = Counter(r[2] for r in rows)
+        kw_counts = Counter(r[3] for r in rows)  # kw idx 3
         top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
         sum_rows.append((cliente, len(rows), top_kw))
     sum_rows.sort(key=lambda t: t[1], reverse=True)
@@ -604,16 +637,19 @@ def envia_email_clientes(por_cliente: dict):
         parts.append(f"<h2 id='{anchor}'>{cliente}</h2>")
         agrupados = {}
         for r in rows:
-            kw = r[2]
+            kw = r[3]
             agrupados.setdefault(kw, []).append(r)
+
         for kw, lista in sorted(agrupados.items(), key=lambda kv: len(kv[1]), reverse=True):
             parts.append(f"<h3>Palavra-chave: {kw} — {len(lista)} ocorrência(s)</h3><ul>")
             for item in lista:
-                link = item[4]
-                titulo_item = item[3] or "(sem título)"
-                resumo = (item[5] or "").strip()
+                secao_item = (item[1] or "").strip()    # Seção idx 1
+                titulo_item = item[4] or "(sem título)" # Portaria idx 4
+                link = item[5]                          # Link idx 5
+                resumo = (item[6] or "").strip()        # Resumo idx 6
+                prefix = f"[{secao_item}] " if secao_item else ""
                 parts.append(
-                    f"<li><a href='{link}' target='_blank'>{titulo_item}</a>"
+                    f"<li>{prefix}<a href='{link}' target='_blank'>{titulo_item}</a>"
                     + (f"<br><em>Resumo:</em> {resumo}" if resumo else "")
                     + "</li>"
                 )
@@ -624,14 +660,12 @@ def envia_email_clientes(por_cliente: dict):
 
     for dest in destinatarios:
         try:
-            api.send_transac_email(
-                SendSmtpEmail(
-                    to=[{"email": dest}],
-                    sender={"email": sender_email},
-                    subject=titulo,
-                    html_content=html,
-                )
-            )
+            api.send_transac_email(SendSmtpEmail(
+                to=[{"email": dest}],
+                sender={"email": sender_email},
+                subject=titulo,
+                html_content=html
+            ))
             print(f"✅ E-mail (clientes) enviado para {dest}")
         except (ApiException, Exception) as e:
             print(f"❌ Falha ao enviar (clientes) para {dest}: {e}")
@@ -639,17 +673,12 @@ def envia_email_clientes(por_cliente: dict):
 
 # Execução principal
 if __name__ == "__main__":
-    conteudo = raspa_dou()
+    conteudo = raspa_dou()  # DO1+DO2
 
-    # 1) Planilha geral
     geral = procura_termos(conteudo)
     salva_na_base(geral)
     envia_email_geral(geral)
 
-    # 2) Planilha por cliente (uma aba por sigla)
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
-
-
