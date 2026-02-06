@@ -41,6 +41,30 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Federal de Educacao Fisica"),
     re.compile(r"\bCREF\b", re.I),
     re.compile(r"\bCONFEF\b", re.I),
+
+    _wholeword_pattern("Conselho Federal de Medicina Veterinária"),
+    _wholeword_pattern("Conselho Federal de Medicina Veterinaria"),
+    re.compile(r"\bCFMV\b", re.I),
+
+    _wholeword_pattern("contratação de professor"),
+    _wholeword_pattern("contratacao de professor"),
+    _wholeword_pattern("contratação de professores"),
+    _wholeword_pattern("contratacao de professores"),
+    _wholeword_pattern("contratação de docente"),
+    _wholeword_pattern("contratacao de docente"),
+    _wholeword_pattern("contratação de docentes"),
+    _wholeword_pattern("contratacao de docentes"),
+    _wholeword_pattern("admissão de professor"),
+    _wholeword_pattern("admissao de professor"),
+    _wholeword_pattern("nomeação de professor"),
+    _wholeword_pattern("nomeacao de professor"),
+    _wholeword_pattern("designação de professor"),
+    _wholeword_pattern("designacao de professor"),
+    _wholeword_pattern("professor substituto"),
+    _wholeword_pattern("professor temporário"),
+    _wholeword_pattern("professor temporario"),
+    _wholeword_pattern("processo seletivo simplificado"),
+    re.compile(r"\bPSS\b", re.I),
 ]
 
 _CNE_PATTERNS = [
@@ -342,9 +366,7 @@ def procura_termos_clientes(conteudo_raspado):
     print("Buscando palavras-chave por cliente (whole-word, título+resumo)…")
     URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
 
-    # aqui a gente agrega keywords por (cliente + link) pra não duplicar ato
-    # se o mesmo ato acionar várias palavras do mesmo cliente, vira uma linha só
-    agreg = {}  # (cliente, href) -> dict com campos e set de keywords
+    agreg = {}
 
     for r in conteudo_raspado["jsonArray"]:
         titulo = r.get("title", "Título não disponível")
@@ -391,7 +413,6 @@ def procura_termos_clientes(conteudo_raspado):
 
     por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
 
-    # monta as linhas finais já com "Palavra-chave" agregada
     for (cliente, _href), d in agreg.items():
         kws_join = "; ".join(sorted(d["kws"], key=lambda x: x.lower()))
         por_cliente[cliente].append([
@@ -431,7 +452,6 @@ def _gs_client_from_env():
     return gspread.authorize(creds)
 
 
-# agora a coluna "Seção" vai no final em ambas as saídas
 COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
 COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
 
@@ -532,7 +552,6 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
     link_idx = COLS_CLIENTE.index("Link")
     cliente_idx = COLS_CLIENTE.index("Cliente")
 
-    # aqui o dedupe vira por (href, cliente) porque a keyword já vem agregada
     all_vals = ws.get_all_values()
     existing = set()
     if len(all_vals) > 1:
@@ -562,7 +581,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
         inserted_items.append({
             "date": r[0],
             "cliente": cli,
-            "keyword": r[2],   # pode ter múltiplas, separadas por "; "
+            "keyword": r[2],
             "title": r[3],
             "href": href,
             "abstract": r[5]
@@ -621,7 +640,7 @@ def _sanitize_emails(raw_list: str):
             continue
         m = EMAIL_RE.match(s)
         candidate = (m.group(2) if m else s).strip()
-        if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate) and candidate.lower() not in seen:
+        if re.match(r"^[^@\s]+@[^@\s<>@]+\.[^@\s<>@]+$", candidate) and candidate.lower() not in seen:
             seen.add(candidate.lower())
             emails.append(candidate.lower())
     return emails
@@ -678,8 +697,6 @@ def _build_email_minimo_html(
         if kw:
             kw_to_general[kw] = True
 
-    # aqui, como keyword pode vir agregada (ex: "pne; plano nacional de educação"),
-    # a gente quebra e registra cada keyword individualmente no resumo do e-mail
     for cli, lst in (inserted_clients_map or {}).items():
         for it in (lst or []):
             raw_kw = (it.get("keyword", "") or "").strip()
