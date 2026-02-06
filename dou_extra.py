@@ -33,8 +33,6 @@ def _wholeword_pattern(phrase: str):
         return None
     return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
-
-# ✅ manter tudo que o outro código bloqueia (CREF/CONFEF + CNE & CES) + extras que você pediu (CFMV + contratação de professor)
 EXCLUDE_PATTERNS = [
     # --- do seu código "base" ---
     _wholeword_pattern("Conselho Regional de Educação Física"),
