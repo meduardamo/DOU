@@ -111,8 +111,7 @@ _CONTENT_CACHE = {}
 
 _HDR = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/126 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 }
 
 
@@ -182,10 +181,12 @@ def raspa_dou_extra(data=None, secoes=None):
             page = requests.get(url, timeout=40, headers=_HDR)
             if page.status_code != 200:
                 continue
+
             soup = BeautifulSoup(page.text, "html.parser")
             params = soup.find("script", {"id": "params"})
             if not params:
                 continue
+
             j = json.loads(params.text)
             arr = j.get("jsonArray", [])
             if arr:
@@ -247,6 +248,7 @@ Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doe
 Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; resolução 258 conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
 IDEC|Saúde|defesa do consumidor; ação civil pública; sac; reforma tributária; ultraprocessados; doenças crônicas não transmissíveis; dcnts; obesidade; codex alimentarius; gordura trans; adoçantes; edulcorantes; rotulagem de alimentos; transgênicos; organismos geneticamente modificados; (ogms); marketing e publicidade de alimentos; comunicação mercadológica; escolas e alimentação escolar; bebidas açucaradas; refrigerante; programa nacional de alimentação escolar; pnae; educação alimentar e nutricional; ean; agrotóxicos; pesticidas; defensivos fitossanitários; tributação de alimentos não saudáveis; desertos alimentares; desperdício de alimentos; segurança alimentar e nutricional; san; direito humano à alimentação; fome; sustentabilidade; mudança climática; plástico; gestão de resíduos; economia circular; desmatamento; greenwashing; energia elétrica; encargos tarifários; subsídios na tarifa de energia; descontos na tarifa de energia; energia pré-paga; abertura do mercado de energia para consumidor cativo; mercado livre de energia; qualidade do serviço de energia; serviço de energia; tarifa social de energia elétrica; geração térmica; combustíveis fósseis; transição energética; descarbonização da matriz elétrica; descarbonização; gases de efeito estufa; acordo de paris; objetivos do desenvolvimento sustentável; reestruturação do setor de energia; reforma do setor elétrico; modernização do setor elétrico; itens de custo da tarifa de energia elétrica; universalização do acesso à energia; eficiência energética; geração distribuída; carvão mineral; painel solar; crédito imobiliário; crédito consignado; publicidade de crédito; cartão de crédito; pagamento de fatura; parcelamento com e sem juros; cartões pré-pagos; programas de fidelidade; cheque especial; taxa de juros; contrato de crédito; endividamento de jovens; crédito estudantil; endividamento de idosos; crédito por meio de aplicativos; abertura e movimentação de conta bancária; cobrança de serviços sem autorização; cadastro positivo; contratação de serviços bancários com imposição de seguros e títulos de capitalização; acessibilidade aos canais de serviços bancários; serviços bancários; caixa eletrônico; internet banking; aplicativos móveis; contratação de pacotes de contas bancárias; acesso à informação em caso de negativa de crédito; plano de saúde; saúde suplementar; medicamentos isentos de prescrição; mip; medicamentos antibióticos; antimicrobianos; propriedade intelectual; patentes; licença compulsória; preços de medicamentos; complexo econômico-industrial da saúde; saúde digital; prontuário eletrônico; rede nacional de dados em saúde; rnds; datasus; proteção de dados pessoais; telessaúde; telecomunicações; internet; tv por assinatura; serviço de acesso condicionado (seac); telefonia móvel; telefonia fixa; tv digital; lei geral de proteção de dados (lgpd); autoridade nacional de proteção de dados (anpd); reconhecimento facial; lei geral de telecomunicações; bens reversíveis; fundo de universalização dos serviços de telecomunicações (fust); provedores de acesso; franquia de internet; marco civil da internet; neutralidade de rede; zero rating; privacidade; lei de acesso à informação; regulação de plataformas digitais; desinformação; fake news; dados biométricos; vazamento de dados; telemarketing; serviço de valor adicionado
 """.strip()
+
 
 def _parse_client_keywords(text: str):
     out = {}
@@ -333,7 +335,9 @@ def procura_termos_clientes(conteudo_raspado):
 
     print("Buscando palavras-chave por cliente (whole-word, título+resumo)…")
     URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
-    por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
+
+    # agrega keywords por (cliente + link) pra não duplicar ato por keyword
+    agreg = {}  # (cliente, href) -> dict com campos + set de kws
 
     for r in conteudo_raspado["jsonArray"]:
         titulo = r.get("title", "Título não disponível")
@@ -349,30 +353,51 @@ def procura_termos_clientes(conteudo_raspado):
         conteudo_pagina = None
 
         for pat, cliente, kw in CLIENT_PATTERNS:
-            if pat.search(texto_norm):
-                if kw.strip().lower() == "bebidas alcoólicas":
-                    if conteudo_pagina is None:
-                        conteudo_pagina = _baixar_conteudo_pagina(link)
-                    alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
-                    if _is_bebidas_ato_irrelevante(alltxt):
-                        continue
+            if not pat.search(texto_norm):
+                continue
 
+            if kw.strip().lower() == "bebidas alcoólicas":
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
-                if _is_blocked(conteudo_pagina):
+                alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                if _is_bebidas_ato_irrelevante(alltxt):
                     continue
 
-                por_cliente[cliente].append([
-                    data_pub,
-                    cliente,
-                    kw,
-                    titulo,
-                    link,
-                    resumo,
-                    conteudo_pagina or "",
-                    "",
-                    ""
-                ])
+            if conteudo_pagina is None:
+                conteudo_pagina = _baixar_conteudo_pagina(link)
+            if _is_blocked(conteudo_pagina):
+                continue
+
+            k = (cliente, link)
+            if k not in agreg:
+                agreg[k] = {
+                    "date": data_pub,
+                    "cliente": cliente,
+                    "title": titulo,
+                    "href": link,
+                    "abstract": resumo,
+                    "content_page": conteudo_pagina or "",
+                    "secao_extra": secao_extra,
+                    "kws": set(),
+                }
+            agreg[k]["kws"].add(kw)
+
+    por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
+
+    for (cliente, _href), d in agreg.items():
+        kws_join = "; ".join(sorted(d["kws"], key=lambda x: x.lower()))
+        por_cliente[cliente].append([
+            d["date"],
+            d["cliente"],
+            kws_join,
+            d["title"],
+            d["href"],
+            d["abstract"],
+            d["content_page"],
+            "",
+            "",
+            d["secao_extra"],
+        ])
 
     return por_cliente
 
@@ -398,8 +423,9 @@ def _gs_client_from_env():
     return gspread.authorize(creds)
 
 
-COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo"]
-COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa"]
+# coluna Seção no final
+COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
+COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
 
 
 def _ensure_header(ws, header):
@@ -461,7 +487,8 @@ def salva_geral_dedupe(palavras_raspadas):
                 item.get("title", ""),
                 href,
                 item.get("abstract", ""),
-                item.get("content_page", "")
+                item.get("content_page", ""),
+                item.get("secao_extra", ""),
             ]
             rows_to_insert.append(row)
             inserted_items.append({
@@ -495,19 +522,18 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
     _ensure_header(ws, COLS_CLIENTE)
 
     link_idx = COLS_CLIENTE.index("Link")
-    palavra_idx = COLS_CLIENTE.index("Palavra-chave")
     cliente_idx = COLS_CLIENTE.index("Cliente")
 
+    # como a keyword vem agregada, dedupe por (href, cliente)
     all_vals = ws.get_all_values()
     existing = set()
     if len(all_vals) > 1:
         for r in all_vals[1:]:
             if len(r) > link_idx:
-                existing.add((
-                    r[link_idx].strip(),
-                    r[palavra_idx].strip() if len(r) > palavra_idx else "",
-                    r[cliente_idx].strip() if len(r) > cliente_idx else ""
-                ))
+                href = r[link_idx].strip()
+                cli = r[cliente_idx].strip() if len(r) > cliente_idx else ""
+                if href and cli:
+                    existing.add((href, cli))
 
     new_rows = []
     inserted_items = []
@@ -516,17 +542,19 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
         if len(r) <= link_idx:
             continue
         href = (r[link_idx] or "").strip()
-        kw = (r[palavra_idx] or "").strip()
         cli = (r[cliente_idx] or "").strip()
-        key = (href, kw, cli)
-        if not href or key in existing:
+        if not href or not cli:
+            continue
+
+        key = (href, cli)
+        if key in existing:
             continue
 
         new_rows.append(r)
         inserted_items.append({
             "date": r[0],
             "cliente": cli,
-            "keyword": kw,
+            "keyword": r[2],
             "title": r[3],
             "href": href,
             "abstract": r[5]
@@ -613,6 +641,13 @@ def _unique_item_count(inserted_general, inserted_clients_map) -> int:
     return len(hrefs)
 
 
+def _split_kws_cell(cell: str):
+    if not cell:
+        return []
+    parts = [p.strip() for p in cell.split(";")]
+    return [p for p in parts if p]
+
+
 def _build_email_minimo_html(
     inserted_general,
     inserted_clients_map,
@@ -635,12 +670,12 @@ def _build_email_minimo_html(
         if kw:
             kw_to_general[kw] = True
 
+    # keyword por cliente pode vir agregada ("pne; plano nacional de educação")
     for cli, lst in (inserted_clients_map or {}).items():
         for it in (lst or []):
-            kw = (it.get("keyword", "") or "").strip()
-            if not kw:
-                continue
-            kw_to_clients.setdefault(kw, set()).add(cli)
+            raw_kw = (it.get("keyword", "") or "").strip()
+            for kw in _split_kws_cell(raw_kw):
+                kw_to_clients.setdefault(kw, set()).add(cli)
 
     all_kws = sorted(set(list(kw_to_general.keys()) + list(kw_to_clients.keys())), key=lambda x: x.lower())
     palavras_acionadas = len(all_kws)
@@ -667,7 +702,11 @@ def _build_email_minimo_html(
 
         lines.append(f"<li><b>{html.escape(kw)}</b> → {html.escape(destino)}</li>")
 
-    acionamentos_html = "<ul style='margin:8px 0 0 18px; padding:0;'>" + "".join(lines) + "</ul>" if lines else "<p style='margin:8px 0 0 0;'>—</p>"
+    acionamentos_html = (
+        "<ul style='margin:8px 0 0 18px; padding:0;'>" + "".join(lines) + "</ul>"
+        if lines else
+        "<p style='margin:8px 0 0 0;'>—</p>"
+    )
 
     body = f"""
     <html>
