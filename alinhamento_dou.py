@@ -7,10 +7,10 @@ from google import genai
 from string import Template
 
 # CONFIG
-GENAI_API_KEY   = os.getenv("GENAI_API_KEY", "")
-MODEL_NAME      = "gemini-2.5-flash"
+GENAI_API_KEY     = os.getenv("GENAI_API_KEY", "")
+MODEL_NAME        = "gemini-2.5-flash"
 PLANILHA_CLIENTES = os.getenv("PLANILHA_CLIENTES")  # só a key
-SKIP_SHEETS = {"Giro de notícias"}  # pular essa aba
+SKIP_SHEETS       = {"Giro de notícias"}  # pular essa aba
 
 # Colunas esperadas
 COL_DATA     = "Data"
@@ -64,24 +64,34 @@ CLIENTE_DESCRICOES = {
 CLIENTE_DESCRICOES.setdefault("Reuna", CLIENTE_DESCRICOES["Reúna"])
 
 # PROMPT
-PROMPT = Template("""
-Você é analista de políticas públicas. Avalie a coerência do texto abaixo com a missão do(a) $cliente.
+PROMPT = Template(r"""
+Você é analista de políticas públicas e faz triagem de atos do DOU e matérias legislativas para um(a) cliente.
 
 Missão/escopo do cliente:
 $descricao
 
-Use apenas o que está no **Conteúdo** (texto extraído do DOU). Se o texto for insuficiente, responda "Parcial".
-Classifique o alinhamento em exatamente um destes valores:
-- "Alinha"
-- "Parcial"
-- "Não Alinha"
+Tarefa:
+Classificar o alinhamento do **Conteúdo** com a missão do cliente.
 
-Explique brevemente (1–3 frases) com base no Conteúdo.
+Regras de evidência:
+- Use **apenas** o Conteúdo. Não use contexto externo.
+- NÃO exija que o Conteúdo cubra TODA a missão do cliente.
+  # Se o Conteúdo estiver claramente dentro de ao menos UMA frente/eixo relevante do cliente, marque "Alinha".
+  # A ausência de menção a outras frentes (ex.: socioemocional) NÃO reduz automaticamente para "Parcial".
+- Use "Parcial" apenas quando houver INSUFICIÊNCIA ou AMBIGUIDADE no texto para decidir.
+- Se o texto for claramente de natureza incompatível com triagem temática (ex.: decisão sobre caso individual sem política pública; deferimento/indeferimento nominal; concessão pontual; nomeação/dispensa rotineira sem tema; mero expediente administrativo sem objeto; publicação que não permite inferir assunto), marque "Não se aplica".
 
+Classes (escolha exatamente UMA):
+- "Alinha": O objeto/tema do Conteúdo é claro e há evidência explícita de relação com pelo menos 1 frente/eixo do cliente.
+- "Parcial": O Conteúdo sugere relação, mas é genérico, incompleto ou não permite identificar com segurança o objeto/tema.
+- "Não Alinha": O tema é claro e não tem relação com a missão do cliente.
+- "Não se aplica": O Conteúdo não é classificável por tema/escopo do cliente com base no texto (exemplos acima), ou é predominantemente ato individual/procedimental sem política pública inferível.
+
+Formato de saída:
 Retorne **somente** JSON válido neste formato:
 {
-  "alinhamento": "Alinha" | "Parcial" | "Não Alinha",
-  "justificativa": "texto explicativo baseado no Conteúdo"
+  "alinhamento": "Alinha" | "Parcial" | "Não Alinha" | "Não se aplica",
+  "justificativa": "1–3 frases citando elementos do Conteúdo (termos/trechos) que sustentam a decisão"
 }
 
 Conteúdo:
@@ -95,12 +105,13 @@ def _gs_client():
         info = json.loads(raw)
         if "private_key" in info and "\\n" in info["private_key"]:
             info["private_key"] = info["private_key"].replace("\\n", "\n")
-        scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(info, scopes=scopes)
     else:
-        creds = Credentials.from_service_account_file("credentials.json",
-                                                     scopes=["https://www.googleapis.com/auth/spreadsheets",
-                                                             "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_file(
+            "credentials.json",
+            scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        )
     return gspread.authorize(creds)
 
 genai_client = genai.Client(api_key=GENAI_API_KEY)
@@ -108,7 +119,12 @@ genai_client = genai.Client(api_key=GENAI_API_KEY)
 def classify_text(cliente_nome: str, conteudo: str) -> dict:
     if not str(conteudo or "").strip():
         return {"alinhamento": "Parcial", "justificativa": "Conteúdo ausente ou vazio; não é possível concluir."}
-    desc = CLIENTE_DESCRICOES.get(cliente_nome, f"Organização '{cliente_nome}' com foco temático conforme sua atuação pública.")
+
+    desc = CLIENTE_DESCRICOES.get(
+        cliente_nome,
+        f"Organização '{cliente_nome}' com foco temático conforme sua atuação pública."
+    )
+
     prompt = PROMPT.substitute(cliente=cliente_nome, descricao=desc, conteudo=conteudo)
 
     stream = genai_client.models.generate_content_stream(
@@ -117,27 +133,32 @@ def classify_text(cliente_nome: str, conteudo: str) -> dict:
         config={"response_mime_type": "application/json"},
     )
     raw = "".join((ch.text or "") for ch in stream).strip()
+
     m = re.search(r"\{.*\}", raw, flags=re.S)
     if not m:
         return {"alinhamento": "Parcial", "justificativa": "Saída sem JSON válido; revisão manual sugerida."}
+
     try:
         data = json.loads(m.group(0))
-        a = str(data.get("alinhamento","")).strip()
-        j = str(data.get("justificativa","")).strip()
-        if a not in ("Alinha","Parcial","Não Alinha"):
+        a = str(data.get("alinhamento", "")).strip()
+        j = str(data.get("justificativa", "")).strip()
+
+        if a not in ("Alinha", "Parcial", "Não Alinha", "Não se aplica"):
             a = "Parcial"
-        if not j: j = "Sem justificativa; revisar."
+        if not j:
+            j = "Sem justificativa; revisar."
         return {"alinhamento": a, "justificativa": j}
     except Exception:
         return {"alinhamento": "Parcial", "justificativa": "Falha ao interpretar JSON; revisão manual sugerida."}
 
 def ensure_output_cols(df: pd.DataFrame) -> pd.DataFrame:
-    if COL_ALINH not in df.columns: df[COL_ALINH] = ""
-    if COL_JUST  not in df.columns: df[COL_JUST]  = ""
+    if COL_ALINH not in df.columns:
+        df[COL_ALINH] = ""
+    if COL_JUST not in df.columns:
+        df[COL_JUST] = ""
     return df
 
 def pick_conteudo(row: pd.Series) -> str:
-    """Fonte principal é a COLUNA 'Conteúdo' (fallback: Resumo → Portaria)."""
     txt = str(row.get(COL_CONTEUDO, "") or "").strip()
     if not txt:
         txt = str(row.get(COL_RESUMO, "") or "").strip()
@@ -155,6 +176,7 @@ def process_sheet(ws) -> None:
     if not values:
         print(f"[{title}] vazia.")
         return
+
     header, rows = values[0], values[1:]
     df = pd.DataFrame(rows, columns=header)
     df = ensure_output_cols(df)
@@ -163,11 +185,10 @@ def process_sheet(ws) -> None:
         print(f"[{title}] coluna '{COL_CONTEUDO}' não encontrada — nada a fazer.")
         return
 
-    # linhas a processar: sem Alinhamento e com algum texto em Conteúdo/Resumo/Portaria
     mask = (df[COL_ALINH].astype(str).str.strip() == "") & (
-        (df.get(COL_CONTEUDO,"").astype(str).str.strip() != "") |
-        (df.get(COL_RESUMO,"").astype(str).str.strip() != "") |
-        (df.get(COL_PORTARIA,"").astype(str).str.strip() != "")
+        (df.get(COL_CONTEUDO, "").astype(str).str.strip() != "") |
+        (df.get(COL_RESUMO, "").astype(str).str.strip() != "") |
+        (df.get(COL_PORTARIA, "").astype(str).str.strip() != "")
     )
     idxs = list(df[mask].index)
     if not idxs:
@@ -175,21 +196,23 @@ def process_sheet(ws) -> None:
         return
 
     print(f"[{title}] classificando {len(idxs)} linha(s)...")
-    for chunk_start in range(0, len(idxs), BATCH_SIZE):
-        for i in idxs[chunk_start:chunk_start+BATCH_SIZE]:
-            conteudo = pick_conteudo(df.loc[i])
-            res = classify_text(title, conteudo)  # usa NOME DA ABA como cliente
-            df.at[i, COL_ALINH] = res["alinhamento"]
-            df.at[i, COL_JUST]  = res["justificativa"]
-            if SLEEP_SEC: time.sleep(SLEEP_SEC)
 
-        # grava até a última linha do mini-lote
+    for chunk_start in range(0, len(idxs), BATCH_SIZE):
+        for i in idxs[chunk_start:chunk_start + BATCH_SIZE]:
+            conteudo = pick_conteudo(df.loc[i])
+            res = classify_text(title, conteudo)
+            df.at[i, COL_ALINH] = res["alinhamento"]
+            df.at[i, COL_JUST] = res["justificativa"]
+            if SLEEP_SEC:
+                time.sleep(SLEEP_SEC)
+
         set_with_dataframe(ws, df, include_index=False, include_column_header=True, resize=False)
-        print(f"[{title}] ✅ salvo até a linha {idxs[min(chunk_start+BATCH_SIZE-1, len(idxs)-1)]+2}")
+        print(f"[{title}] ✅ salvo até a linha {idxs[min(chunk_start + BATCH_SIZE - 1, len(idxs) - 1)] + 2}")
 
 def main():
     if not PLANILHA_CLIENTES:
         raise SystemExit("Defina PLANILHA_CLIENTES (apenas a key).")
+
     gc = _gs_client()
     sh = gc.open_by_key(PLANILHA_CLIENTES)
 
