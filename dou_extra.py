@@ -34,13 +34,40 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
 
+# ✅ manter tudo que o outro código bloqueia (CREF/CONFEF + CNE & CES) + extras que você pediu (CFMV + contratação de professor)
 EXCLUDE_PATTERNS = [
+    # --- do seu código "base" ---
     _wholeword_pattern("Conselho Regional de Educação Física"),
     _wholeword_pattern("Conselho Federal de Educação Física"),
     _wholeword_pattern("Conselho Regional de Educacao Fisica"),
     _wholeword_pattern("Conselho Federal de Educacao Fisica"),
     re.compile(r"\bCREF\b", re.I),
     re.compile(r"\bCONFEF\b", re.I),
+
+    # --- extras que você pediu no DOU EXTRA ---
+    _wholeword_pattern("Conselho Federal de Medicina Veterinária"),
+    _wholeword_pattern("Conselho Federal de Medicina Veterinaria"),
+    re.compile(r"\bCFMV\b", re.I),
+
+    _wholeword_pattern("contratação de professor"),
+    _wholeword_pattern("contratacao de professor"),
+    _wholeword_pattern("contratação de professores"),
+    _wholeword_pattern("contratacao de professores"),
+    _wholeword_pattern("contratação de docente"),
+    _wholeword_pattern("contratacao de docente"),
+    _wholeword_pattern("contratação de docentes"),
+    _wholeword_pattern("contratacao de docentes"),
+    _wholeword_pattern("admissão de professor"),
+    _wholeword_pattern("admissao de professor"),
+    _wholeword_pattern("nomeação de professor"),
+    _wholeword_pattern("nomeacao de professor"),
+    _wholeword_pattern("designação de professor"),
+    _wholeword_pattern("designacao de professor"),
+    _wholeword_pattern("professor substituto"),
+    _wholeword_pattern("professor temporário"),
+    _wholeword_pattern("professor temporario"),
+    _wholeword_pattern("processo seletivo simplificado"),
+    re.compile(r"\bPSS\b", re.I),
 ]
 
 _CNE_PATTERNS = [
@@ -64,11 +91,16 @@ def _is_blocked(text: str) -> bool:
     if not text:
         return False
     nt = _normalize_ws(text)
+
+    # bloqueios diretos
     for pat in EXCLUDE_PATTERNS:
         if pat and pat.search(nt):
             return True
+
+    # regra do seu código base: CNE + CES juntos
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
+
     return False
 
 
@@ -146,8 +178,10 @@ def _baixar_conteudo_pagina(url: str) -> str:
                 _CONTENT_CACHE[url] = txt
                 return txt
 
-        sels = ["div.single-content", "div.article-content", "article",
-                "div#content-core", "div#content", "section#content"]
+        sels = [
+            "div.single-content", "div.article-content", "article",
+            "div#content-core", "div#content", "section#content"
+        ]
         textos = []
         for sel in sels:
             el = soup.select_one(sel)
@@ -170,7 +204,11 @@ def raspa_dou_extra(data=None, secoes=None):
     if data is None:
         data = datetime.now().strftime("%d-%m-%Y")
     if secoes is None:
-        secoes = [s.strip() for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",") if s.strip()]
+        secoes = [
+            s.strip()
+            for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",")
+            if s.strip()
+        ]
 
     print(f"Raspando edição EXTRA do dia {data} nas seções: {', '.join(secoes)}…")
     combined = {"jsonArray": []}
@@ -242,7 +280,7 @@ FMCSV|Primeira infância|criança; criança feliz; alfabetização; creche; cona
 IEPS|Saúde|sus; sistema único de saúde; equidade em saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; seguros de saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; economia solidária em saúde mental; pessoa em situação de rua; saúde mental; fiscalização de comunidades terapêuticas; rede de atenção psicossocial; raps; unidades de acolhimento; assistência multiprofissional; centros de convivência; cannabis; canabidiol; tratamento terapêutico; desinstitucionalização; manicômios; hospitais de custódia; saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; dependência química; vícios; ludopatia; treinamento; capacitação em saúde mental; intervenções terapêuticas em saúde mental; internet e redes sociais na saúde mental; violência psicológica; surto psicótico
 Manual|Saúde|ozempic; wegovy; mounjaro; telemedicina; telessaúde; cbd; cannabis medicinal; cfm; conselho federal de medicina; farmácia magistral; medicamentos manipulados; minoxidil; emagrecedores; retenção de receita; tirzepatida; liraglutida
 Mevo|Saúde|prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do sus; venda e distribuição de medicamentos; bula digital; atesta cfm; sistemas de controle de farmácia; sngpc; farmacêutico remoto; medicamentos isentos de prescrição (mips); rnds - rede nacional de dados em saúde; interoperabilidade; listas de substâncias entorpecentes, psicotrópicas, precursoras e outras; substâncias entorpecentes; substâncias psicotrópicas; substâncias precursoras; substâncias sob controle especial; tabela sus; saúde digital; seidigi; icp-brasil; farmácia popular; cmed
-Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
+Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
 Cactus|Saúde|saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; pse; eca; rede de atenção psicossocial; raps; caps; centro de apoio psicossocial; programa saúde na escola; bullying; cyberbullying; eca digital
 Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doenças crônicas não transmissíveis; rotulagem de bebidas alcoólicas; educação em saúde; bebidas alcoólicas; imposto seletivo; dcnts; rotulagem de alimentos; alimentos ultraprocessados; publicidade infantil; publicidade de alimentos ultraprocessados; tributação de bebidas alcoólicas; alíquota de bebidas alcoólicas; cigarro eletrônico; controle de tabaco; violência doméstica; exposição a fatores de risco; departamento de saúde mental; hipertensão arterial; saúde digital; violência contra crianças; violência contra mulheres; feminicídio; cop 30
 Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; resolução 258 conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
@@ -336,8 +374,7 @@ def procura_termos_clientes(conteudo_raspado):
     print("Buscando palavras-chave por cliente (whole-word, título+resumo)…")
     URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
 
-    # agrega keywords por (cliente + link) pra não duplicar ato por keyword
-    agreg = {}  # (cliente, href) -> dict com campos + set de kws
+    agreg = {}
 
     for r in conteudo_raspado["jsonArray"]:
         titulo = r.get("title", "Título não disponível")
@@ -378,7 +415,7 @@ def procura_termos_clientes(conteudo_raspado):
                     "abstract": resumo,
                     "content_page": conteudo_pagina or "",
                     "secao_extra": secao_extra,
-                    "kws": set(),
+                    "kws": set()
                 }
             agreg[k]["kws"].add(kw)
 
@@ -423,7 +460,6 @@ def _gs_client_from_env():
     return gspread.authorize(creds)
 
 
-# coluna Seção no final
 COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
 COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
 
@@ -524,7 +560,6 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
     link_idx = COLS_CLIENTE.index("Link")
     cliente_idx = COLS_CLIENTE.index("Cliente")
 
-    # como a keyword vem agregada, dedupe por (href, cliente)
     all_vals = ws.get_all_values()
     existing = set()
     if len(all_vals) > 1:
@@ -613,7 +648,7 @@ def _sanitize_emails(raw_list: str):
             continue
         m = EMAIL_RE.match(s)
         candidate = (m.group(2) if m else s).strip()
-        if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate) and candidate.lower() not in seen:
+        if re.match(r"^[^@\s]+@[^@\s<>@]+\.[^@\s<>@]+$", candidate) and candidate.lower() not in seen:
             seen.add(candidate.lower())
             emails.append(candidate.lower())
     return emails
@@ -670,7 +705,6 @@ def _build_email_minimo_html(
         if kw:
             kw_to_general[kw] = True
 
-    # keyword por cliente pode vir agregada ("pne; plano nacional de educação")
     for cli, lst in (inserted_clients_map or {}).items():
         for it in (lst or []):
             raw_kw = (it.get("keyword", "") or "").strip()
