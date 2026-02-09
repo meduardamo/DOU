@@ -41,6 +41,14 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Conselho Federal de Educacao Fisica"),
     re.compile(r"\bCREF\b", re.I),
     re.compile(r"\bCONFEF\b", re.I),
+
+    # bloqueio: Sistema CFMV/CRMV (medicina veterinária)
+    _wholeword_pattern("Conselho Federal de Medicina Veterinária"),
+    _wholeword_pattern("Conselho Federal de Medicina Veterinaria"),
+    _wholeword_pattern("Conselho Regional de Medicina Veterinária"),
+    _wholeword_pattern("Conselho Regional de Medicina Veterinaria"),
+    re.compile(r"\bCFMV\b", re.I),
+    re.compile(r"\bCRMV\b", re.I),
 ]
 
 _CNE_PATTERNS = [
@@ -60,15 +68,37 @@ def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 
+_PROF_RH_PATTERNS = [
+    re.compile(
+        r"\b(contratac(?:a|ã)o|admiss(?:a|ã)o|nomeac(?:a|ã)o|designac(?:a|ã)o|convocac(?:a|ã)o|posse|exonerac(?:a|ã)o|dispensa)\b.*\bprofessor(?:a)?\b",
+        re.I
+    ),
+    re.compile(
+        r"\bprofessor(?:a)?\b.*\b(contratac(?:a|ã)o|admiss(?:a|ã)o|nomeac(?:a|ã)o|designac(?:a|ã)o|convocac(?:a|ã)o|posse|exonerac(?:a|ã)o|dispensa)\b",
+        re.I
+    ),
+    re.compile(r"\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|edital|concurso\s+p[uú]blico)\b.*\bprofessor(?:a)?\b", re.I),
+    re.compile(r"\bprofessor(?:a)?\b.*\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|edital|concurso\s+p[uú]blico)\b", re.I),
+    re.compile(r"\bprofessor\s+(substituto|tempor[aá]rio|visitante)\b", re.I),
+]
+
+
 def _is_blocked(text: str) -> bool:
     if not text:
         return False
     nt = _normalize_ws(text)
+
     for pat in EXCLUDE_PATTERNS:
         if pat and pat.search(nt):
             return True
+
+    for pat in _PROF_RH_PATTERNS:
+        if pat.search(nt):
+            return True
+
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
+
     return False
 
 
@@ -168,17 +198,15 @@ def _baixar_conteudo_pagina(url: str) -> str:
         return ""
 
 
-def raspa_dou_extra(data=None, secoes=None):
+def raspa_dou(data=None, secoes=None):
     if data is None:
         data = datetime.now().strftime("%d-%m-%Y")
-    if secoes is None:
-        secoes = [
-            s.strip()
-            for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",")
-            if s.strip()
-        ]
 
-    print(f"Raspando edição EXTRA do dia {data} nas seções: {', '.join(secoes)}…")
+    # padrão: DO1 + DO2 (pode sobrescrever com env DOU_SECOES="DO1,DO2")
+    if secoes is None:
+        secoes = [s.strip() for s in (os.getenv("DOU_SECOES") or "DO1,DO2").split(",") if s.strip()]
+
+    print(f"Raspando DOU do dia {data} nas seções: {', '.join(secoes)}…")
     combined = {"jsonArray": []}
 
     for sec in secoes:
@@ -197,17 +225,17 @@ def raspa_dou_extra(data=None, secoes=None):
             arr = j.get("jsonArray", [])
             if arr:
                 for it in arr:
-                    if isinstance(it, dict) and "secao_extra" not in it:
-                        it["secao_extra"] = sec
+                    if isinstance(it, dict) and "secao" not in it:
+                        it["secao"] = sec
                 combined["jsonArray"].extend(arr)
         except Exception:
             continue
 
     if combined["jsonArray"]:
-        print(f"OK, coletadas {len(combined['jsonArray'])} entradas (extra).")
+        print(f"OK, coletadas {len(combined['jsonArray'])} entradas.")
         return combined
 
-    print("Nenhum item encontrado na(s) seção(ões) extra.")
+    print("Nenhum item encontrado na(s) seção(ões).")
     return None
 
 
@@ -248,11 +276,7 @@ FMCSV|Primeira infância|criança; criança feliz; alfabetização; creche; cona
 IEPS|Saúde|sus; sistema único de saúde; equidade em saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; seguros de saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; economia solidária em saúde mental; pessoa em situação de rua; saúde mental; fiscalização de comunidades terapêuticas; rede de atenção psicossocial; raps; unidades de acolhimento; assistência multiprofissional; centros de convivência; cannabis; canabidiol; tratamento terapêutico; desinstitucionalização; manicômios; hospitais de custódia; saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; dependência química; vícios; ludopatia; treinamento; capacitação em saúde mental; intervenções terapêuticas em saúde mental; internet e redes sociais na saúde mental; violência psicológica; surto psicótico
 Manual|Saúde|ozempic; wegovy; mounjaro; telemedicina; telessaúde; cbd; cannabis medicinal; cfm; conselho federal de medicina; farmácia magistral; medicamentos manipulados; minoxidil; emagrecedores; retenção de receita; tirzepatida; liraglutida
 Mevo|Saúde|prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do sus; venda e distribuição de medicamentos; bula digital; atesta cfm; sistemas de controle de farmácia; sngpc; farmacêutico remoto; medicamentos isentos de prescrição (mips); rnds - rede nacional de dados em saúde; interoperabilidade; listas de substâncias entorpecentes, psicotrópicas, precursoras e outras; substâncias entorpecentes; substâncias psicotrópicas; substâncias precursoras; substâncias sob controle especial; tabela sus; saúde digital; seidigi; icp-brasil; farmácia popular; cmed
-Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
-Cactus|Saúde|saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; pse; eca; rede de atenção psicossocial; raps; caps; centro de apoio psicossocial; programa saúde na escola; bullying; cyberbullying; eca digital
-Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doenças crônicas não transmissíveis; rotulagem de bebidas alcoólicas; educação em saúde; bebidas alcoólicas; imposto seletivo; dcnts; rotulagem de alimentos; alimentos ultraprocessados; publicidade infantil; publicidade de alimentos ultraprocessados; tributação de bebidas alcoólicas; alíquota de bebidas alcoólicas; cigarro eletrônico; controle de tabaco; violência doméstica; exposição a fatores de risco; departamento de saúde mental; hipertensão arterial; saúde digital; violência contra crianças; violência contra mulheres; feminicídio; cop 30
-Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; resolução 258 conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
-IDEC|Saúde|defesa do consumidor; ação civil pública; sac; reforma tributária; ultraprocessados; doenças crônicas não transmissíveis; dcnts; obesidade; codex alimentarius; gordura trans; adoçantes; edulcorantes; rotulagem de alimentos; transgênicos; organismos geneticamente modificados; (ogms); marketing e publicidade de alimentos; comunicação mercadológica; escolas e alimentação escolar; bebidas açucaradas; refrigerante; programa nacional de alimentação escolar; pnae; educação alimentar e nutricional; ean; agrotóxicos; pesticidas; defensivos fitossanitários; tributação de alimentos não saudáveis; desertos alimentares; desperdício de alimentos; segurança alimentar e nutricional; san; direito humano à alimentação; fome; sustentabilidade; mudança climática; plástico; gestão de resíduos; economia circular; desmatamento; greenwashing; energia elétrica; encargos tarifários; subsídios na tarifa de energia; descontos na tarifa de energia; energia pré-paga; abertura do mercado de energia para consumidor cativo; mercado livre de energia; qualidade do serviço de energia; serviço de energia; tarifa social de energia elétrica; geração térmica; combustíveis fósseis; transição energética; descarbonização da matriz elétrica; descarbonização; gases de efeito estufa; acordo de paris; objetivos do desenvolvimento sustentável; reestruturação do setor de energia; reforma do setor elétrico; modernização do setor elétrico; itens de custo da tarifa de energia elétrica; universalização do acesso à energia; eficiência energética; geração distribuída; carvão mineral; painel solar; crédito imobiliário; crédito consignado; publicidade de crédito; cartão de crédito; pagamento de fatura; parcelamento com e sem juros; cartões pré-pagos; programas de fidelidade; cheque especial; taxa de juros; contrato de crédito; endividamento de jovens; crédito estudantil; endividamento de idosos; crédito por meio de aplicativos; abertura e movimentação de conta bancária; cobrança de serviços sem autorização; cadastro positivo; contratação de serviços bancários com imposição de seguros e títulos de capitalização; acessibilidade aos canais de serviços bancários; serviços bancários; caixa eletrônico; internet banking; aplicativos móveis; contratação de pacotes de contas bancárias; acesso à informação em caso de negativa de crédito; plano de saúde; saúde suplementar; medicamentos isentos de prescrição; mip; medicamentos antibióticos; antimicrobianos; propriedade intelectual; patentes; licença compulsória; preços de medicamentos; complexo econômico-industrial da saúde; saúde digital; prontuário eletrônico; rede nacional de dados em saúde; rnds; datasus; proteção de dados pessoais; telessaúde; telecomunicações; internet; tv por assinatura; serviço de acesso condicionado (seac); telefonia móvel; telefonia fixa; tv digital; lei geral de proteção de dados (lgpd); autoridade nacional de proteção de dados (anpd); reconhecimento facial; lei geral de telecomunicações; bens reversíveis; fundo de universalização dos serviços de telecomunicações (fust); provedores de acesso; franquia de internet; marco civil da internet; neutralidade de rede; zero rating; privacidade; lei de acesso à informação; regulação de plataformas digitais; desinformação; fake news; dados biométricos; vazamento de dados; telemarketing; serviço de valor adicionado
+Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
 """.strip()
 
 
@@ -281,7 +305,7 @@ for cli, kws in CLIENT_KEYWORDS.items():
 
 def procura_termos_geral(conteudo_raspado):
     if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
-        print("Nenhum conteúdo para analisar (geral extra).")
+        print("Nenhum conteúdo para analisar (geral).")
         return None
 
     print("Buscando palavras-chave (geral, whole-word, título+resumo)…")
@@ -294,7 +318,7 @@ def procura_termos_geral(conteudo_raspado):
         resumo = r.get("content", "")
         link = URL_BASE + r.get("urlTitle", "")
         data_pub = (r.get("pubDate", "") or "")[:10]
-        secao_extra = r.get("secao_extra", "")
+        secao = r.get("secao", "")
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -318,7 +342,7 @@ def procura_termos_geral(conteudo_raspado):
 
                 resultados_por_palavra[palavra].append({
                     "date": data_pub,
-                    "secao_extra": secao_extra,
+                    "secao": secao,
                     "title": titulo,
                     "href": link,
                     "abstract": resumo,
@@ -327,23 +351,21 @@ def procura_termos_geral(conteudo_raspado):
                 algum = True
 
     if not algum:
-        print("Nenhum resultado encontrado (geral extra).")
+        print("Nenhum resultado encontrado (geral).")
         return None
 
-    print("Palavras-chave (geral extra) encontradas.")
+    print("Palavras-chave (geral) encontradas.")
     return resultados_por_palavra
 
 
 def procura_termos_clientes(conteudo_raspado):
     if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
-        print("Nenhum conteúdo para analisar (clientes extra).")
+        print("Nenhum conteúdo para analisar (clientes).")
         return {}
 
     print("Buscando palavras-chave por cliente (whole-word, título+resumo)…")
     URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
 
-    # aqui a gente agrega keywords por (cliente + link) pra não duplicar ato
-    # se o mesmo ato acionar várias palavras do mesmo cliente, vira uma linha só
     agreg = {}  # (cliente, href) -> dict com campos e set de keywords
 
     for r in conteudo_raspado["jsonArray"]:
@@ -351,7 +373,7 @@ def procura_termos_clientes(conteudo_raspado):
         resumo = r.get("content", "")
         link = URL_BASE + r.get("urlTitle", "")
         data_pub = (r.get("pubDate", "") or "")[:10]
-        secao_extra = r.get("secao_extra", "")
+        secao = r.get("secao", "")
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -384,14 +406,13 @@ def procura_termos_clientes(conteudo_raspado):
                     "href": link,
                     "abstract": resumo,
                     "content_page": conteudo_pagina or "",
-                    "secao_extra": secao_extra,
+                    "secao": secao,
                     "kws": set()
                 }
             agreg[k]["kws"].add(kw)
 
     por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
 
-    # monta as linhas finais já com "Palavra-chave" agregada
     for (cliente, _href), d in agreg.items():
         kws_join = "; ".join(sorted(d["kws"], key=lambda x: x.lower()))
         por_cliente[cliente].append([
@@ -404,7 +425,7 @@ def procura_termos_clientes(conteudo_raspado):
             d["content_page"],
             "",
             "",
-            d["secao_extra"],
+            d["secao"],
         ])
 
     return por_cliente
@@ -431,7 +452,6 @@ def _gs_client_from_env():
     return gspread.authorize(creds)
 
 
-# agora a coluna "Seção" vai no final em ambas as saídas
 COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
 COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
 
@@ -452,7 +472,7 @@ def _ws_gid(ws) -> str:
 
 def salva_geral_dedupe(palavras_raspadas):
     if not palavras_raspadas:
-        print("Sem palavras encontradas para salvar (geral extra).")
+        print("Sem palavras encontradas para salvar (geral).")
         return 0, [], None, None
 
     gc = _gs_client_from_env()
@@ -496,12 +516,12 @@ def salva_geral_dedupe(palavras_raspadas):
                 href,
                 item.get("abstract", ""),
                 item.get("content_page", ""),
-                item.get("secao_extra", ""),
+                item.get("secao", ""),
             ]
             rows_to_insert.append(row)
             inserted_items.append({
                 "date": item.get("date", ""),
-                "secao_extra": item.get("secao_extra", ""),
+                "secao": item.get("secao", ""),
                 "keyword": palavra,
                 "title": item.get("title", ""),
                 "href": href,
@@ -511,9 +531,9 @@ def salva_geral_dedupe(palavras_raspadas):
 
     if rows_to_insert:
         ws.insert_rows(rows_to_insert, row=2, value_input_option="USER_ENTERED")
-        print(f"{len(rows_to_insert)} linhas adicionadas (geral extra).")
+        print(f"{len(rows_to_insert)} linhas adicionadas (geral).")
     else:
-        print("Nenhuma linha nova (geral extra).")
+        print("Nenhuma linha nova (geral).")
 
     return len(rows_to_insert), inserted_items, sh, ws
 
@@ -532,7 +552,6 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
     link_idx = COLS_CLIENTE.index("Link")
     cliente_idx = COLS_CLIENTE.index("Cliente")
 
-    # aqui o dedupe vira por (href, cliente) porque a keyword já vem agregada
     all_vals = ws.get_all_values()
     existing = set()
     if len(all_vals) > 1:
@@ -562,7 +581,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
         inserted_items.append({
             "date": r[0],
             "cliente": cli,
-            "keyword": r[2],   # pode ter múltiplas, separadas por "; "
+            "keyword": r[2],
             "title": r[3],
             "href": href,
             "abstract": r[5]
@@ -579,7 +598,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
 def salva_por_cliente(por_cliente):
     plan_id = os.getenv("PLANILHA_CLIENTES")
     if not plan_id:
-        print("PLANILHA_CLIENTES não definido; pulando saída por cliente (extra).")
+        print("PLANILHA_CLIENTES não definido; pulando saída por cliente.")
         return 0, {}, None, {}
 
     gc = _gs_client_from_env()
@@ -678,8 +697,6 @@ def _build_email_minimo_html(
         if kw:
             kw_to_general[kw] = True
 
-    # aqui, como keyword pode vir agregada (ex: "pne; plano nacional de educação"),
-    # a gente quebra e registra cada keyword individualmente no resumo do e-mail
     for cli, lst in (inserted_clients_map or {}).items():
         for it in (lst or []):
             raw_kw = (it.get("keyword", "") or "").strip()
@@ -721,7 +738,7 @@ def _build_email_minimo_html(
     <html>
       <body style="font-family: Arial, Helvetica, sans-serif; color:#111; line-height:1.35;">
         <div style="max-width:820px;">
-          <h2 style="margin:0 0 6px 0;">Edição Extra do DOU</h2>
+          <h2 style="margin:0 0 6px 0;">DOU — Monitoramento (DO1 + DO2)</h2>
           <p style="margin:0 0 14px 0;">Atualização automática baseada em palavras-chave monitoradas.</p>
 
           <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin:0 0 12px 0;">
@@ -753,7 +770,7 @@ def _build_email_minimo_html(
     return body
 
 
-def envia_email_brevo_extra_minimo(
+def envia_email_brevo_minimo(
     inserted_general,
     inserted_clients_map,
     planilha_id,
@@ -765,19 +782,19 @@ def envia_email_brevo_extra_minimo(
     itens_novos = _unique_item_count(inserted_general, inserted_clients_map)
 
     if itens_novos <= 0 and qtd_geral <= 0 and qtd_clientes <= 0:
-        print("Nada novo — e-mail (extra) não será enviado.")
+        print("Nada novo — e-mail não será enviado.")
         return
 
     api_key = os.getenv("BREVO_API_KEY")
     sender_email = os.getenv("EMAIL")
     raw_dest = os.getenv("DESTINATARIOS", "")
     if not (api_key and sender_email and raw_dest):
-        print("Dados de e-mail incompletos; pulando envio (extra).")
+        print("Dados de e-mail incompletos; pulando envio.")
         return
 
     destinatarios = _sanitize_emails(raw_dest)
     hoje = datetime.now().strftime("%d-%m-%Y")
-    subject = f"DOU EXTRA — {hoje} | {itens_novos} itens novos"
+    subject = f"DOU — {hoje} | {itens_novos} itens novos"
 
     html_body = _build_email_minimo_html(
         inserted_general=inserted_general or [],
@@ -788,7 +805,7 @@ def envia_email_brevo_extra_minimo(
     )
 
     if not html_body:
-        print("HTML vazio — pulando envio (extra).")
+        print("HTML vazio — pulando envio.")
         return
 
     cfg = Configuration()
@@ -803,13 +820,13 @@ def envia_email_brevo_extra_minimo(
                 subject=subject,
                 html_content=html_body
             ))
-            print(f"✅ [DOU EXTRA] E-mail enviado para {dest}")
+            print(f"✅ [DOU] E-mail enviado para {dest}")
         except (ApiException, Exception) as e:
-            print(f"❌ Falha ao enviar (extra) para {dest}: {e}")
+            print(f"❌ Falha ao enviar para {dest}: {e}")
 
 
 if __name__ == "__main__":
-    conteudo = raspa_dou_extra()
+    conteudo = raspa_dou()
 
     geral = procura_termos_geral(conteudo)
     _qtd_geral, inserted_general, _sh_geral, ws_geral = salva_geral_dedupe(geral)
@@ -821,7 +838,7 @@ if __name__ == "__main__":
     planilha_clientes_id = os.getenv("PLANILHA_CLIENTES") or ""
     planilha_gid = _ws_gid(ws_geral) if ws_geral else None
 
-    envia_email_brevo_extra_minimo(
+    envia_email_brevo_minimo(
         inserted_general=inserted_general,
         inserted_clients_map=inserted_clients_map,
         planilha_id=planilha_id,
