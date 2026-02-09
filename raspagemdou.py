@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 
-# E-mail (Brevo)
 from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
@@ -28,9 +27,8 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
 
 
-# BLOQUEIOS (TODOS): CREF/CONFEF + Educação Superior (IES/credenciamento etc.) + Acórdão + Novo PAC
-# + decisões/pedidos de casos particulares (regex) + filtro genérico ato decisão empresa
-# + professor + CFMV/CRMV
+# BLOQUEIOS 
+
 EXCLUDE_PATTERNS = [
     # CREF/CONFEF
     _wholeword_pattern("Conselho Regional de Educação Física"),
@@ -146,7 +144,6 @@ def _is_blocked(text: str) -> bool:
 
     return False
 
-
 # Filtro específico para "Bebidas Alcoólicas"
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
@@ -196,7 +193,6 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     if any(t in nt for t in _BEBIDAS_EXCLUDE_TERMS):
         return True
     return False
-
 
 # Bloqueio genérico: atos/portarias de concessão/decisão individual (empresa/processo)
 _ATO_EMPRESA_EXCLUDE_TERMS = [
