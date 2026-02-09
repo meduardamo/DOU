@@ -79,6 +79,59 @@ EXCLUDE_PATTERNS = [
     # Registro Especial (genérico)
     _wholeword_pattern("Registro Especial"),
     re.compile(r"\bregesp\b", re.I),
+
+    # Licitações / compras públicas
+    _wholeword_pattern("Licitação"),
+    _wholeword_pattern("Licitacao"),
+    _wholeword_pattern("Pregão"),
+    _wholeword_pattern("Pregao"),
+    _wholeword_pattern("Concorrência"),
+    _wholeword_pattern("Concorrencia"),
+    _wholeword_pattern("Tomada de Preços"),
+    _wholeword_pattern("Tomada de Precos"),
+    _wholeword_pattern("Chamamento Público"),
+    _wholeword_pattern("Chamamento Publico"),
+    _wholeword_pattern("Dispensa de Licitação"),
+    _wholeword_pattern("Dispensa de Licitacao"),
+    _wholeword_pattern("Inexigibilidade"),
+    _wholeword_pattern("Aviso de Licitação"),
+    _wholeword_pattern("Aviso de Licitacao"),
+    _wholeword_pattern("Cotação eletrônica"),
+    _wholeword_pattern("Cotacao eletronica"),
+    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|dispensa|inexigibilidade)\b", re.I),
+    re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o)\b", re.I),
+
+    # Prorrogações contratuais (extratos/termos aditivos etc.) que não são "portaria"
+    _wholeword_pattern("Extrato de Contrato"),
+    _wholeword_pattern("Extrato do Contrato"),
+    _wholeword_pattern("Extrato de Termo Aditivo"),
+    _wholeword_pattern("Extrato do Termo Aditivo"),
+    _wholeword_pattern("Termo Aditivo"),
+    _wholeword_pattern("Aditamento"),
+    _wholeword_pattern("Prorrogação de Prazo"),
+    _wholeword_pattern("Prorrogacao de Prazo"),
+    _wholeword_pattern("Prorrogação de Vigência"),
+    _wholeword_pattern("Prorrogacao de Vigencia"),
+    _wholeword_pattern("Termo de Prorrogação"),
+    _wholeword_pattern("Termo de Prorrogacao"),
+    _wholeword_pattern("Vigência"),
+    _wholeword_pattern("Vigencia"),
+    _wholeword_pattern("Apostilamento"),
+    re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio|termo)\b", re.I),
+    re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
+
+    # Radiodifusão / telecom (outorga, RTV, canal etc.)
+    _wholeword_pattern("Radiodifusão"),
+    _wholeword_pattern("Radiodifusao"),
+    _wholeword_pattern("Serviço de Radiodifusão"),
+    _wholeword_pattern("Servico de Radiodifusao"),
+    _wholeword_pattern("Outorga"),
+    _wholeword_pattern("Renovação de Outorga"),
+    _wholeword_pattern("Renovacao de Outorga"),
+    _wholeword_pattern("Retransmissão de Televisão"),
+    _wholeword_pattern("Retransmissao de Televisao"),
+    re.compile(r"\b(radiodifus[aã]o|rtv|retransmiss[aã]o|outorga|canal\s+\d+)\b", re.I),
+
 ]
 
 _CNE_PATTERNS = [
@@ -904,3 +957,4 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
