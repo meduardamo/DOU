@@ -1,4 +1,9 @@
-import os, re, json, unicodedata, requests, gspread
+import os
+import re
+import json
+import unicodedata
+import requests
+import gspread
 from bs4 import BeautifulSoup
 from datetime import datetime
 from google.oauth2.service_account import Credentials
@@ -8,8 +13,6 @@ from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
 
-
-# Normalização + busca whole-word
 def _normalize(s: str) -> str:
     if s is None:
         return ""
@@ -17,17 +20,19 @@ def _normalize(s: str) -> str:
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return t.lower()
 
+
 def _normalize_ws(s: str) -> str:
-    return re.sub(r'[^a-z0-9]+', ' ', _normalize(s)).strip()
+    return re.sub(r"[^a-z0-9]+", " ", _normalize(s)).strip()
+
 
 def _wholeword_pattern(phrase: str):
     toks = [t for t in _normalize_ws(phrase).split() if t]
     if not toks:
         return None
-    return re.compile(r'\b' + r'\s+'.join(map(re.escape, toks)) + r'\b')
+    return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
 
-# BLOQUEIOS 
+# BLOQUEIOS
 
 EXCLUDE_PATTERNS = [
     # CREF/CONFEF
@@ -76,21 +81,18 @@ EXCLUDE_PATTERNS = [
     re.compile(r"\bregesp\b", re.I),
 ]
 
-# CNE
 _CNE_PATTERNS = [
     _wholeword_pattern("Conselho Nacional de Educação"),
     _wholeword_pattern("Conselho Nacional de Educacao"),
     re.compile(r"\bCNE\b", re.I),
 ]
 
-# CES (Câmara de Educação Superior) — só bloqueia se houver coocorrência com CNE
 _CES_PATTERNS = [
     _wholeword_pattern("Câmara de Educação Superior"),
     _wholeword_pattern("Camara de Educacao Superior"),
     re.compile(r"\bCES\b", re.I),
 ]
 
-# Decisões/pedidos de casos particulares
 _DECISAO_CASE_REGEX = re.compile(
     r"\b("
     r"defiro|indefiro|deferido|indeferido|homologo|homologar|concedo|conceder|"
@@ -105,7 +107,6 @@ _DECISAO_CASE_REGEX = re.compile(
     re.I
 )
 
-# Professor (contratação, nomeação, seleção etc.)
 _PROF_RH_PATTERNS = [
     re.compile(
         r"\b(contratac(?:a|ã)o|admiss(?:a|ã)o|nomeac(?:a|ã)o|designac(?:a|ã)o|convocac(?:a|ã)o|posse|exonerac(?:a|ã)o|dispensa)\b.*\bprofessor(?:a)?\b",
@@ -120,8 +121,10 @@ _PROF_RH_PATTERNS = [
     re.compile(r"\bprofessor\s+(substituto|tempor[aá]rio|visitante)\b", re.I),
 ]
 
+
 def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
+
 
 def _is_blocked(text: str) -> bool:
     if not text:
@@ -144,7 +147,10 @@ def _is_blocked(text: str) -> bool:
 
     return False
 
-# Filtro específico para "Bebidas Alcoólicas"
+
+# =========================
+# Filtro específico "Bebidas Alcoólicas"
+# =========================
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -161,7 +167,7 @@ _BEBIDAS_EXCLUDE_TERMS = [
     "produtor",
     "importador",
     "marcas comerciais",
-    "atualiza as marcas"
+    "atualiza as marcas",
 ]
 
 _BEBIDAS_WHITELIST_TERMS = [
@@ -183,8 +189,9 @@ _BEBIDAS_WHITELIST_TERMS = [
     "pontos de venda",
     "seguranca viaria",
     "alcool e direcao",
-    "monitoramento"
+    "monitoramento",
 ]
+
 
 def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     nt = _normalize_ws(texto_bruto)
@@ -194,7 +201,10 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
         return True
     return False
 
-# Bloqueio genérico: atos/portarias de concessão/decisão individual (empresa/processo)
+
+# =========================
+# Bloqueio genérico: atos/decisões de empresa
+# =========================
 _ATO_EMPRESA_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -228,6 +238,7 @@ _ATO_EMPRESA_DECISAO_REGEX = re.compile(
     re.I
 )
 
+
 def _is_ato_decisao_empresa_irrelevante(texto_bruto: str) -> bool:
     nt = _normalize_ws(texto_bruto)
     if _ATO_EMPRESA_DECISAO_REGEX.search(nt):
@@ -236,24 +247,24 @@ def _is_ato_decisao_empresa_irrelevante(texto_bruto: str) -> bool:
         return True
     return False
 
-
-# Coleta do conteúdo completo da página do DOU
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))
 _CONTENT_CACHE: dict[str, str] = {}
 
 _HDR = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/126 Safari/537.36"
+                  "(KHTML, like Gecko) Chrome/126 Safari/537.36",
 }
+
 
 def _baixar_conteudo_pagina(url: str) -> str:
     if not url:
         return ""
     if url in _CONTENT_CACHE:
         return _CONTENT_CACHE[url]
+
     try:
-        r = requests.get(url, timeout=40, headers=_HDR)
+        r = requests.get(url, timeout=40, headers=_HDR, allow_redirects=True)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -279,7 +290,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
 
         sels = [
             "div.single-content", "div.article-content", "article",
-            "div#content-core", "div#content", "section#content"
+            "div#content-core", "div#content", "section#content",
         ]
         textos = []
         for sel in sels:
@@ -287,47 +298,52 @@ def _baixar_conteudo_pagina(url: str) -> str:
             if not el:
                 continue
             ps = [p.get_text(" ", strip=True) for p in el.find_all(["p", "li"]) if p.get_text(strip=True)]
-            if len(ps) >= 2:
-                textos.append("\n\n".join(ps))
-            else:
-                textos.append(el.get_text(" ", strip=True))
+            textos.append("\n\n".join(ps) if len(ps) >= 2 else el.get_text(" ", strip=True))
 
         txt = max(textos, key=len) if textos else soup.get_text(" ", strip=True)
         txt = re.sub(r"[ \t]+", " ", txt).strip()
         if CONTEUDO_MAX and len(txt) > CONTEUDO_MAX:
             txt = txt[:CONTEUDO_MAX] + "…"
+
         _CONTENT_CACHE[url] = txt
         return txt
     except Exception:
         return ""
 
-
-# Raspagem do DOU (DO1 + DO2) e coluna "secao" (DO1/DO2 em maiúsculo)
 def raspa_dou(data=None, secoes=None):
     if data is None:
-        data = datetime.now().strftime('%d-%m-%Y')
+        data = datetime.now().strftime("%d-%m-%Y")
 
     if secoes is None:
         secoes = [s.strip() for s in (os.getenv("DOU_SECOES") or "DO1,DO2").split(",") if s.strip()]
     secoes_norm = [s.upper() for s in secoes]
 
-    print(f'Raspando as notícias do dia {data} nas seções: {", ".join(secoes_norm)}...')
+    print(f"Raspando as notícias do dia {data} nas seções: {', '.join(secoes_norm)}...")
 
     combined = {"jsonArray": []}
 
     for sec in secoes_norm:
         try:
-            url = f'http://www.in.gov.br/leiturajornal?data={data}&secao={sec}'
-            page = requests.get(url, timeout=40, headers=_HDR)
+            url = f"https://www.in.gov.br/leiturajornal?data={data}&secao={sec}"
+            page = requests.get(url, timeout=40, headers=_HDR, allow_redirects=True)
             page.raise_for_status()
 
-            soup = BeautifulSoup(page.text, 'html.parser')
+            soup = BeautifulSoup(page.text, "html.parser")
+
+            # 1) principal: <script id="params"> com JSON
             params = soup.find("script", {"id": "params"})
-            if not params:
-                print(f"[{sec}] Elemento <script id='params'> não encontrado.")
+            raw_json = (params.text.strip() if (params and params.text) else None)
+
+            # 2) fallback: tenta extrair o JSON do HTML via regex (quando o script some)
+            if not raw_json:
+                m = re.search(r'(\{"jsonArray"\s*:\s*\[.*?\]\s*\})', page.text, flags=re.S)
+                raw_json = (m.group(1).strip() if m else None)
+
+            if not raw_json:
+                print(f"[{sec}] payload não encontrado. status={page.status_code} final_url={getattr(page,'url',url)}")
                 continue
 
-            j = json.loads(params.text)
+            j = json.loads(raw_json)
             arr = j.get("jsonArray", []) or []
 
             for it in arr:
@@ -348,64 +364,50 @@ def raspa_dou(data=None, secoes=None):
     print("Nenhum item encontrado em DO1/DO2.")
     return None
 
-
-# Palavras gerais (planilha geral)
 PALAVRAS_GERAIS = [
-    'Infância','Criança','Infantil','Infâncias','Crianças',
-    'Educação','Ensino','Escolaridade',
-    'Plano Nacional da Educação','PNE','Educacional',
-    'Alfabetização','Letramento',
-    'Saúde','Telessaúde','Telemedicina',
-    'Digital','Digitais','Prontuário',
-    'Programa Saúde na Escola','PSE',
-    'Psicosocial','Mental','Saúde Mental','Dados para a Saúde','Morte Evitável',
-    'Doenças Crônicas Não Transmissíveis','Rotulagem de Bebidas Alcoólicas',
-    'Educação em Saúde','Bebidas Alcoólicas','Imposto Seletivo',
-    'Rotulagem de Alimentos','Alimentos Ultraprocessados',
-    'Publicidade Infantil','Publicidade de Alimentos Ultraprocessados',
-    'Tributação de Bebidas Alcoólicas','Alíquota de Bebidas Alcoólicas',
-    'Cigarro Eletrônico','Controle de Tabaco','Violência Doméstica',
-    'Exposição a Fatores de Risco','Departamento de Saúde Mental',
-    'Hipertensão Arterial','Alimentação Escolar','PNAE','Agora Tem Especialistas',
-
-    # Alfabetização
-    'Alfabetização','Alfabetização na Idade Certa','Criança Alfabetizada','Meta de Alfabetização',
-    'Plano Nacional de Alfabetização','Programa Criança Alfabetizada','Idade Certa para Alfabetização',
-    'Alfabetização de Crianças','Alfabetização Inicial','Alfabetização Plena',
-    'Alfabetização em Língua Portuguesa','Analfabetismo','Erradicação do Analfabetismo',
-    'Programa Nacional de Alfabetização na Idade Certa','Pacto pela Alfabetização',
-    'Política Nacional de Alfabetização','Recomposição das Aprendizagens em Alfabetização',
-    'Competências de Alfabetização','Avaliação da Alfabetização','Saeb Alfabetização',
-
-    # Matemática
-    'Alfabetização Matemática','Analfabetismo Matemático','Aprendizagem em Matemática',
-    'Recomposição das Aprendizagens em Matemática','Recomposição de Aprendizagem',
-    'Competências Matemáticas','Proficiência em Matemática',
-    'Avaliação Diagnóstica de Matemática','Avaliação Formativa de Matemática',
-    'Política Nacional de Matemática','Saeb Matemática','Ideb Matemática','BNCC Matemática',
-    'Matemática no Ensino Fundamental','Matemática no Ensino Médio',
-    'Anos Iniciais de Matemática','Anos Finais de Matemática','OBMEP',
-    'Olimpíada Brasileira de Matemática das Escolas Públicas','Olimpíada de Matemática','PNLD Matemática'
+    "Infância", "Criança", "Infantil", "Infâncias", "Crianças",
+    "Educação", "Ensino", "Escolaridade",
+    "Plano Nacional da Educação", "PNE", "Educacional",
+    "Alfabetização", "Letramento",
+    "Saúde", "Telessaúde", "Telemedicina",
+    "Digital", "Digitais", "Prontuário",
+    "Programa Saúde na Escola", "PSE",
+    "Psicosocial", "Mental", "Saúde Mental", "Dados para a Saúde", "Morte Evitável",
+    "Doenças Crônicas Não Transmissíveis", "Rotulagem de Bebidas Alcoólicas",
+    "Educação em Saúde", "Bebidas Alcoólicas", "Imposto Seletivo",
+    "Rotulagem de Alimentos", "Alimentos Ultraprocessados",
+    "Publicidade Infantil", "Publicidade de Alimentos Ultraprocessados",
+    "Tributação de Bebidas Alcoólicas", "Alíquota de Bebidas Alcoólicas",
+    "Cigarro Eletrônico", "Controle de Tabaco", "Violência Doméstica",
+    "Exposição a Fatores de Risco", "Departamento de Saúde Mental",
+    "Hipertensão Arterial", "Alimentação Escolar", "PNAE", "Agora Tem Especialistas",
+    "Alfabetização na Idade Certa", "Criança Alfabetizada", "Meta de Alfabetização",
+    "Programa Criança Alfabetizada", "Pacto pela Alfabetização",
+    "Recomposição das Aprendizagens em Alfabetização",
+    "Alfabetização Matemática", "Analfabetismo Matemático",
+    "Recomposição das Aprendizagens em Matemática",
+    "Política Nacional de Matemática", "Saeb Matemática", "Ideb Matemática", "BNCC Matemática",
+    "OBMEP", "Olimpíada Brasileira de Matemática das Escolas Públicas", "PNLD Matemática"
 ]
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
 
 def procura_termos(conteudo_raspado):
-    if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
-        print('Nenhum conteúdo para analisar (geral).')
+    if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
+        print("Nenhum conteúdo para analisar (geral).")
         return None
 
-    print('Buscando palavras-chave (geral, whole-word, título+resumo)...')
-    URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
+    print("Buscando palavras-chave (geral, whole-word, título+resumo)...")
+    URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
     resultados_por_palavra = {palavra: [] for palavra in PALAVRAS_GERAIS}
     algum = False
 
-    for resultado in conteudo_raspado['jsonArray']:
-        titulo   = resultado.get('title', 'Título não disponível')
-        resumo   = resultado.get('content', '')
-        link     = URL_BASE + (resultado.get('urlTitle', '') or '')
-        data_pub = (resultado.get('pubDate', '') or '')[:10]
-        secao    = (resultado.get('secao') or '').strip()
+    for resultado in conteudo_raspado["jsonArray"]:
+        titulo = resultado.get("title", "Título não disponível")
+        resumo = resultado.get("content", "")
+        link = URL_BASE + (resultado.get("urlTitle", "") or "")
+        data_pub = (resultado.get("pubDate", "") or "")[:10]
+        secao = (resultado.get("secao") or "").strip()
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -434,23 +436,22 @@ def procura_termos(conteudo_raspado):
                     continue
 
                 resultados_por_palavra[palavra].append({
-                    'date': data_pub,
-                    'title': titulo,
-                    'href': link,
-                    'abstract': resumo,
-                    'content_page': conteudo_pagina,
-                    'secao': secao
+                    "date": data_pub,
+                    "title": titulo,
+                    "href": link,
+                    "abstract": resumo,
+                    "content_page": conteudo_pagina,
+                    "secao": secao,
                 })
                 algum = True
 
     if not algum:
-        print('Nenhum resultado encontrado (geral).')
+        print("Nenhum resultado encontrado (geral).")
         return None
-    print('Palavras-chave (geral) encontradas.')
+
+    print("Palavras-chave (geral) encontradas.")
     return resultados_por_palavra
 
-
-# Mapa: Cliente → Tema → Keywords (whole-word)
 CLIENT_THEME_DATA = """
 IAS|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação; pne
 ISG|Educação|tempo integral; pne; fundeb; ensino técnico profissionalizante; educação profissional e tecnológica; ept; ensino médio; propag; infraestrutura escolar; ensino fundamental integral; alfabetização integral; escola em tempo integral; programa escola em tempo integral; ensino fundamental em tempo integral
@@ -473,12 +474,13 @@ def _parse_client_keywords(text: str):
     for line in text.splitlines():
         if not line.strip():
             continue
-        cliente, tema, kws = [x.strip() for x in line.split("|", 2)]
+        cliente, _tema, kws = [x.strip() for x in line.split("|", 2)]
         out.setdefault(cliente, [])
         for kw in [k.strip() for k in kws.split(";") if k.strip()]:
             if kw not in out[cliente]:
                 out[cliente].append(kw)
     return out
+
 
 CLIENT_KEYWORDS = _parse_client_keywords(CLIENT_THEME_DATA)
 
@@ -491,22 +493,21 @@ for cli, kws in CLIENT_KEYWORDS.items():
 
 
 def procura_termos_clientes(conteudo_raspado):
-    if conteudo_raspado is None or 'jsonArray' not in conteudo_raspado:
-        print('Nenhum conteúdo para analisar (clientes).')
+    if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
+        print("Nenhum conteúdo para analisar (clientes).")
         return {}
 
-    print('Buscando palavras-chave por cliente (whole-word, título+resumo)...')
-    URL_BASE = 'https://www.in.gov.br/en/web/dou/-/'
+    print("Buscando palavras-chave por cliente (whole-word, título+resumo)...")
+    URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
 
-    # agrega por (cliente, link) pra não duplicar ato quando bater em 2+ keywords
     agreg = {}  # (cliente, link) -> dict
 
-    for r in conteudo_raspado['jsonArray']:
-        titulo   = r.get('title', 'Título não disponível')
-        resumo   = r.get('content', '')
-        link     = URL_BASE + (r.get('urlTitle', '') or '')
-        data_pub = (r.get('pubDate', '') or '')[:10]
-        secao    = (r.get('secao') or '').strip()
+    for r in conteudo_raspado["jsonArray"]:
+        titulo = r.get("title", "Título não disponível")
+        resumo = r.get("content", "")
+        link = URL_BASE + (r.get("urlTitle", "") or "")
+        data_pub = (r.get("pubDate", "") or "")[:10]
+        secao = (r.get("secao") or "").strip()
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -567,28 +568,28 @@ def procura_termos_clientes(conteudo_raspado):
 
     return por_cliente
 
-
-# Google Sheets helpers
 def _gs_client_from_env():
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+
     if not raw:
         jf = "credentials.json"
         if os.path.exists(jf):
-            scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
             creds = Credentials.from_service_account_file(jf, scopes=scopes)
             return gspread.authorize(creds)
-        raise RuntimeError("Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado.")
+        raise RuntimeError("Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado e credentials.json não existe.")
+
     info = json.loads(raw)
     if "private_key" in info and "\\n" in info["private_key"]:
         info["private_key"] = info["private_key"].replace("\\n", "\n")
-    scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
+
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-COLS_GERAL = ["Data","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Seção"]
 
-# manter igual sua planilha (Data, Cliente, Palavra-chave, Portaria, Link, ...)
-COLS_CLIENTE = ["Data","Cliente","Palavra-chave","Portaria","Link","Resumo","Conteúdo","Alinhamento","Justificativa","Seção"]
+COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
+COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
+
 
 def _ensure_header(ws, header):
     current = ws.row_values(1)
@@ -614,54 +615,58 @@ def _ensure_header(ws, header):
 
 def salva_na_base(palavras_raspadas):
     if not palavras_raspadas:
-        print('Sem palavras encontradas para salvar (geral).')
+        print("Sem palavras encontradas para salvar (geral).")
         return
-    print('Salvando (geral) na planilha...')
+
+    print("Salvando (geral) na planilha...")
 
     gc = _gs_client_from_env()
-    planilha_id = os.getenv('PLANILHA')
+    planilha_id = os.getenv("PLANILHA")
     if not planilha_id:
         raise RuntimeError("Env PLANILHA não definido.")
 
     sh = gc.open_by_key(planilha_id)
+
     try:
-        ws = sh.worksheet('Página1')
+        ws = sh.worksheet("Página1")
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title='Página1', rows="2000", cols=str(len(COLS_GERAL)))
+        ws = sh.add_worksheet(title="Página1", rows="2000", cols=str(len(COLS_GERAL)))
+
     _ensure_header(ws, COLS_GERAL)
 
     rows_to_append = []
     for palavra, lista in (palavras_raspadas or {}).items():
         for item in lista:
             rows_to_append.append([
-                item.get('date',''),
+                item.get("date", ""),
                 palavra,
-                item.get('title',''),
-                item.get('href',''),
-                item.get('abstract',''),
-                item.get('content_page',''),
-                item.get('secao','')
+                item.get("title", ""),
+                item.get("href", ""),
+                item.get("abstract", ""),
+                item.get("content_page", ""),
+                item.get("secao", ""),
             ])
 
     if rows_to_append:
-        ws.insert_rows(rows_to_append, row=2, value_input_option='USER_ENTERED')
+        ws.insert_rows(rows_to_append, row=2, value_input_option="USER_ENTERED")
         print(f"{len(rows_to_append)} linhas adicionadas (geral).")
     else:
-        print('Nenhum dado válido para salvar (geral).')
+        print("Nenhum dado válido para salvar (geral).")
 
 
-# Por cliente (dedupe por Link+Cliente, porque keywords já estão agregadas na célula)
 def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if not rows:
         print(f"[{sheet_name}] sem linhas para anexar.")
         return
+
     try:
         ws = sh.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=sheet_name, rows=str(max(100, len(rows)+10)), cols=len(COLS_CLIENTE))
+        ws = sh.add_worksheet(title=sheet_name, rows=str(max(100, len(rows) + 10)), cols=len(COLS_CLIENTE))
+
     _ensure_header(ws, COLS_CLIENTE)
 
-    link_idx    = COLS_CLIENTE.index("Link")
+    link_idx = COLS_CLIENTE.index("Link")
     cliente_idx = COLS_CLIENTE.index("Cliente")
 
     all_vals = ws.get_all_values()
@@ -670,7 +675,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
         for r in all_vals[1:]:
             if len(r) > link_idx:
                 href = (r[link_idx] or "").strip()
-                cli  = (r[cliente_idx] or "").strip() if len(r) > cliente_idx else ""
+                cli = (r[cliente_idx] or "").strip() if len(r) > cliente_idx else ""
                 if href and cli:
                     existing.add((href, cli))
 
@@ -700,6 +705,7 @@ def salva_por_cliente(por_cliente: dict):
     if not plan_id:
         print("PLANILHA_CLIENTES não definido; pulando saída por cliente.")
         return
+
     gc = _gs_client_from_env()
     sh = gc.open_by_key(plan_id)
 
@@ -714,37 +720,39 @@ def salva_por_cliente(por_cliente: dict):
     for cli, rows in (por_cliente or {}).items():
         _append_dedupe_por_cliente(sh, cli, rows)
 
-
-# E-mails
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
+
 
 def _sanitize_emails(raw_list: str):
     if not raw_list:
         return []
-    parts = re.split(r'[,\n;]+', raw_list)
+    parts = re.split(r"[,\n;]+", raw_list)
     emails, seen = [], set()
     for it in parts:
         s = unicodedata.normalize("NFKC", it)
-        s = re.sub(r'[\u200B-\u200D\uFEFF]', '', s).strip().strip("'").strip('"')
+        s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s).strip().strip("'").strip('"')
         if not s:
             continue
         m = EMAIL_RE.match(s)
         candidate = (m.group(2) if m else s).strip()
         if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate) and candidate.lower() not in seen:
-            seen.add(candidate.lower()); emails.append(candidate.lower())
+            seen.add(candidate.lower())
+            emails.append(candidate.lower())
     return emails
 
+
 def _brevo_client():
-    api_key = os.getenv('BREVO_API_KEY')
+    api_key = os.getenv("BREVO_API_KEY")
     if not api_key:
         return None
     cfg = Configuration()
-    cfg.api_key['api-key'] = api_key
+    cfg.api_key["api-key"] = api_key
     return TransactionalEmailsApi(ApiClient(configuration=cfg))
+
 
 def envia_email_geral(palavras_raspadas):
     if not palavras_raspadas:
-        print('Sem palavras encontradas para enviar (geral).')
+        print("Sem palavras encontradas para enviar (geral).")
         return
 
     total_itens = sum(len(v or []) for v in (palavras_raspadas or {}).values())
@@ -752,31 +760,31 @@ def envia_email_geral(palavras_raspadas):
         print("Sem ocorrências (geral) — pulando envio.")
         return
 
-    sender_email = os.getenv('EMAIL')
-    raw_dest = os.getenv('DESTINATARIOS', '')
-    planilha_id  = os.getenv("PLANILHA")
+    sender_email = os.getenv("EMAIL")
+    raw_dest = os.getenv("DESTINATARIOS", "")
+    planilha_id = os.getenv("PLANILHA")
     api = _brevo_client()
     if not (api and sender_email and raw_dest and planilha_id):
         print("Dados incompletos; pulando envio (geral).")
         return
 
     destinatarios = _sanitize_emails(raw_dest)
-    data = datetime.now().strftime('%d-%m-%Y')
-    titulo = f'Resultados do Diário Oficial — {data}'
-    planilha_url = f'https://docs.google.com/spreadsheets/d/{planilha_id}/edit?gid=0'
+    data = datetime.now().strftime("%d-%m-%Y")
+    titulo = f"Resultados do Diário Oficial — {data}"
+    planilha_url = f"https://docs.google.com/spreadsheets/d/{planilha_id}/edit?gid=0"
 
     parts = [
         "<html><body>",
         "<h1>Consulta ao Diário Oficial da União</h1>",
-        f"<p>As matérias já estão na <a href='{planilha_url}' target='_blank'>planilha</a>.</p>"
+        f"<p>As matérias já estão na <a href='{planilha_url}' target='_blank'>planilha</a>.</p>",
     ]
     for palavra, lista in (palavras_raspadas or {}).items():
         if lista:
             parts.append(f"<h2>{palavra}</h2><ul>")
             for r in lista:
-                link = r.get('href', '#')
-                title = r.get('title', '(sem título)')
-                secao = (r.get('secao') or '').strip()
+                link = r.get("href", "#")
+                title = r.get("title", "(sem título)")
+                secao = (r.get("secao") or "").strip()
                 prefix = f"[{secao}] " if secao else ""
                 parts.append(f"<li>{prefix}<a href='{link}' target='_blank'>{title}</a></li>")
             parts.append("</ul>")
@@ -790,14 +798,15 @@ def envia_email_geral(palavras_raspadas):
                 to=[{"email": dest}],
                 sender={"email": sender_email},
                 subject=titulo,
-                html_content=html_body
+                html_content=html_body,
             ))
-            print(f"✅ E-mail (geral) enviado para {dest}")
+            print(f"E-mail (geral) enviado para {dest}")
         except (ApiException, Exception) as e:
-            print(f"❌ Falha ao enviar (geral) para {dest}: {e}")
+            print(f"Falha ao enviar (geral) para {dest}: {e}")
+
 
 def envia_email_clientes(por_cliente: dict):
-    if not por_cliente or all(not (rows) for rows in por_cliente.values()):
+    if not por_cliente or all(not rows for rows in por_cliente.values()):
         print("Sem resultados para enviar (clientes) — nenhuma ocorrência encontrada.")
         return
 
@@ -812,7 +821,7 @@ def envia_email_clientes(por_cliente: dict):
         return
 
     def _slug(s: str) -> str:
-        return re.sub(r'[^a-z0-9]+', '-', _normalize_ws(s)).strip('-') or "secao"
+        return re.sub(r"[^a-z0-9]+", "-", _normalize_ws(s)).strip("-") or "secao"
 
     destinatarios = _sanitize_emails(raw_dest)
     data = datetime.now().strftime("%d-%m-%Y")
@@ -823,7 +832,7 @@ def envia_email_clientes(por_cliente: dict):
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        kw_counts = Counter(r[2] for r in rows)  # aqui já vem "kw1; kw2", então o sumário reflete isso
+        kw_counts = Counter(r[2] for r in rows)  # aqui já vem "kw1; kw2"
         top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
         sum_rows.append((cliente, len(rows), top_kw))
     sum_rows.sort(key=lambda t: t[1], reverse=True)
@@ -851,7 +860,7 @@ def envia_email_clientes(por_cliente: dict):
 
         agrupados = {}
         for r in rows:
-            kw = r[2]  # pode ser "PNE; Plano Nacional de Educação"
+            kw = r[2]  # "kw1; kw2"
             agrupados.setdefault(kw, []).append(r)
 
         for kw, lista in sorted(agrupados.items(), key=lambda kv: len(kv[1]), reverse=True):
@@ -878,14 +887,13 @@ def envia_email_clientes(por_cliente: dict):
                 to=[{"email": dest}],
                 sender={"email": sender_email},
                 subject=titulo,
-                html_content=html_body
+                html_content=html_body,
             ))
-            print(f"✅ E-mail (clientes) enviado para {dest}")
+            print(f"E-mail (clientes) enviado para {dest}")
         except (ApiException, Exception) as e:
-            print(f"❌ Falha ao enviar (clientes) para {dest}: {e}")
+            print(f"Falha ao enviar (clientes) para {dest}: {e}")
 
 
-# Execução principal
 if __name__ == "__main__":
     conteudo = raspa_dou()
 
