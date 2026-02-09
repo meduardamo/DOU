@@ -33,8 +33,12 @@ def _wholeword_pattern(phrase: str):
         return None
     return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
+
+# =========================
+# Bloqueios (mesma linha do último)
+# =========================
 EXCLUDE_PATTERNS = [
-    # --- do seu código "base" ---
+    # CREF/CONFEF
     _wholeword_pattern("Conselho Regional de Educação Física"),
     _wholeword_pattern("Conselho Federal de Educação Física"),
     _wholeword_pattern("Conselho Regional de Educacao Fisica"),
@@ -42,30 +46,36 @@ EXCLUDE_PATTERNS = [
     re.compile(r"\bCREF\b", re.I),
     re.compile(r"\bCONFEF\b", re.I),
 
-    # --- extras que você pediu no DOU EXTRA ---
-    _wholeword_pattern("Conselho Federal de Medicina Veterinária"),
-    _wholeword_pattern("Conselho Federal de Medicina Veterinaria"),
-    re.compile(r"\bCFMV\b", re.I),
+    # Educação superior (IES/credenciamento etc.)
+    _wholeword_pattern("Educação Superior"),
+    _wholeword_pattern("Educacao Superior"),
+    _wholeword_pattern("Ensino Superior"),
+    _wholeword_pattern("Instituição de Ensino Superior"),
+    _wholeword_pattern("Instituicao de Ensino Superior"),
+    re.compile(r"\bies\b", re.I),
+    _wholeword_pattern("Credenciamento"),
+    _wholeword_pattern("Recredenciamento"),
+    _wholeword_pattern("Autorização de curso"),
+    _wholeword_pattern("Autorizacao de curso"),
+    _wholeword_pattern("Reconhecimento de curso"),
+    _wholeword_pattern("Renovação de reconhecimento"),
+    _wholeword_pattern("Renovacao de reconhecimento"),
+    _wholeword_pattern("E-MEC"),
+    _wholeword_pattern("MEC"),
 
-    _wholeword_pattern("contratação de professor"),
-    _wholeword_pattern("contratacao de professor"),
-    _wholeword_pattern("contratação de professores"),
-    _wholeword_pattern("contratacao de professores"),
-    _wholeword_pattern("contratação de docente"),
-    _wholeword_pattern("contratacao de docente"),
-    _wholeword_pattern("contratação de docentes"),
-    _wholeword_pattern("contratacao de docentes"),
-    _wholeword_pattern("admissão de professor"),
-    _wholeword_pattern("admissao de professor"),
-    _wholeword_pattern("nomeação de professor"),
-    _wholeword_pattern("nomeacao de professor"),
-    _wholeword_pattern("designação de professor"),
-    _wholeword_pattern("designacao de professor"),
-    _wholeword_pattern("professor substituto"),
-    _wholeword_pattern("professor temporário"),
-    _wholeword_pattern("professor temporario"),
-    _wholeword_pattern("processo seletivo simplificado"),
-    re.compile(r"\bPSS\b", re.I),
+    # Acórdão
+    _wholeword_pattern("Acórdão"),
+    _wholeword_pattern("Acordao"),
+    re.compile(r"\bac[oó]rd[aã]o\b", re.I),
+
+    # Novo PAC
+    _wholeword_pattern("Novo PAC"),
+    _wholeword_pattern("Novo Programa de Aceleração do Crescimento"),
+    _wholeword_pattern("Novo Programa de Aceleracao do Crescimento"),
+
+    # Registro Especial (genérico)
+    _wholeword_pattern("Registro Especial"),
+    re.compile(r"\bregesp\b", re.I),
 ]
 
 _CNE_PATTERNS = [
@@ -85,23 +95,106 @@ def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 
+# Decisões/pedidos de casos particulares
+_DECISAO_CASE_REGEX = re.compile(
+    r"\b("
+    r"defiro|indefiro|deferido|indeferido|homologo|homologar|concedo|conceder|"
+    r"autorizo|autorizar|reconheco|reconhecer|recredencio|recredenciar|"
+    r"credencio|credenciar|reconhecido|credenciado|recredenciado|"
+    r"aprovado|aprovo|aprovar|nego\s+provimento|dou\s+provimento|"
+    r"julgo|julgar|decido|decidir"
+    r")\b.*\b("
+    r"pedido|requerimento|processo|interessado|interessada|"
+    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
+    r")\b",
+    re.I
+)
+
+# Professor + CFMV/CRMV
+_PROF_CFMV_CRMV_REGEX = re.compile(
+    r"\b("
+    r"professor|docente|magisterio|magist[ée]rio|"
+    r"nomeia|nomear|designa|designar|contrata|contratar|"
+    r"admite|admitir|convoca|convocar|"
+    r"portaria|edital|chamada|selecao|sele[cç][aã]o"
+    r")\b.*\b("
+    r"cfmv|crmv|conselho\s+federal\s+de\s+medicina\s+veterinaria|"
+    r"conselho\s+regional\s+de\s+medicina\s+veterinaria"
+    r")\b",
+    re.I
+)
+
+# Atos/decisões de empresa (genérico)
+_ATO_EMPRESA_EXCLUDE_TERMS = [
+    "ato declaratorio executivo",
+    "registro especial",
+    "regesp",
+    "defis",
+    "srrf",
+    "drf",
+    "cnpj",
+    "ncm",
+    "importador",
+    "exportador",
+    "engarrafador",
+    "produtor",
+    "estabelecimentos comerciais atacadistas",
+    "cooperativas de produtores",
+    "delegacia da receita federal",
+]
+
+_ATO_EMPRESA_DECISAO_REGEX = re.compile(
+    r"\b("
+    r"concede|conceder|defiro|indefiro|deferido|indeferido|"
+    r"autoriza|autorizar|homologo|homologar|"
+    r"credencio|credenciar|recredencio|recredenciar|"
+    r"reconheco|reconhecer|aprovo|aprovar|"
+    r"torna\s+publico\s+o\s+resultado"
+    r")\b.*\b("
+    r"registro\s+especial|regesp|"
+    r"pedido|requerimento|processo|interessad[oa]|"
+    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
+    r")\b",
+    re.I
+)
+
+
+def _is_ato_decisao_empresa_irrelevante(texto_bruto: str) -> bool:
+    nt = _normalize_ws(texto_bruto)
+    if _ATO_EMPRESA_DECISAO_REGEX.search(nt):
+        return True
+    if any(t in nt for t in _ATO_EMPRESA_EXCLUDE_TERMS):
+        return True
+    return False
+
+
 def _is_blocked(text: str) -> bool:
     if not text:
         return False
     nt = _normalize_ws(text)
 
-    # bloqueios diretos
     for pat in EXCLUDE_PATTERNS:
         if pat and pat.search(nt):
             return True
 
-    # regra do seu código base: CNE + CES juntos
+    # CNE + CES juntos
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
+        return True
+
+    # Casos particulares
+    if _DECISAO_CASE_REGEX.search(nt):
+        return True
+
+    # Professor + CFMV/CRMV
+    if _PROF_CFMV_CRMV_REGEX.search(nt):
         return True
 
     return False
 
 
+# =========================
+# Bebidas: whitelist/exclude
+# =========================
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -136,12 +229,16 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     return False
 
 
+# =========================
+# Conteúdo da página
+# =========================
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))
 _CONTENT_CACHE = {}
 
 _HDR = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/126 Safari/537.36"
 }
 
 
@@ -176,10 +273,8 @@ def _baixar_conteudo_pagina(url: str) -> str:
                 _CONTENT_CACHE[url] = txt
                 return txt
 
-        sels = [
-            "div.single-content", "div.article-content", "article",
-            "div#content-core", "div#content", "section#content"
-        ]
+        sels = ["div.single-content", "div.article-content", "article",
+                "div#content-core", "div#content", "section#content"]
         textos = []
         for sel in sels:
             el = soup.select_one(sel)
@@ -198,15 +293,14 @@ def _baixar_conteudo_pagina(url: str) -> str:
         return ""
 
 
+# =========================
+# Raspagem EXTRA
+# =========================
 def raspa_dou_extra(data=None, secoes=None):
     if data is None:
         data = datetime.now().strftime("%d-%m-%Y")
     if secoes is None:
-        secoes = [
-            s.strip()
-            for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",")
-            if s.strip()
-        ]
+        secoes = [s.strip() for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",") if s.strip()]
 
     print(f"Raspando edição EXTRA do dia {data} nas seções: {', '.join(secoes)}…")
     combined = {"jsonArray": []}
@@ -217,14 +311,12 @@ def raspa_dou_extra(data=None, secoes=None):
             page = requests.get(url, timeout=40, headers=_HDR)
             if page.status_code != 200:
                 continue
-
             soup = BeautifulSoup(page.text, "html.parser")
             params = soup.find("script", {"id": "params"})
             if not params:
                 continue
-
             j = json.loads(params.text)
-            arr = j.get("jsonArray", [])
+            arr = j.get("jsonArray", []) or []
             if arr:
                 for it in arr:
                     if isinstance(it, dict) and "secao_extra" not in it:
@@ -241,6 +333,9 @@ def raspa_dou_extra(data=None, secoes=None):
     return None
 
 
+# =========================
+# Palavras gerais + clientes
+# =========================
 PALAVRAS_GERAIS = [
     "Infância", "Criança", "Infantil", "Infâncias", "Crianças",
     "Educação", "Ensino", "Escolaridade",
@@ -278,7 +373,7 @@ FMCSV|Primeira infância|criança; criança feliz; alfabetização; creche; cona
 IEPS|Saúde|sus; sistema único de saúde; equidade em saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; seguros de saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; economia solidária em saúde mental; pessoa em situação de rua; saúde mental; fiscalização de comunidades terapêuticas; rede de atenção psicossocial; raps; unidades de acolhimento; assistência multiprofissional; centros de convivência; cannabis; canabidiol; tratamento terapêutico; desinstitucionalização; manicômios; hospitais de custódia; saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; dependência química; vícios; ludopatia; treinamento; capacitação em saúde mental; intervenções terapêuticas em saúde mental; internet e redes sociais na saúde mental; violência psicológica; surto psicótico
 Manual|Saúde|ozempic; wegovy; mounjaro; telemedicina; telessaúde; cbd; cannabis medicinal; cfm; conselho federal de medicina; farmácia magistral; medicamentos manipulados; minoxidil; emagrecedores; retenção de receita; tirzepatida; liraglutida
 Mevo|Saúde|prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do sus; venda e distribuição de medicamentos; bula digital; atesta cfm; sistemas de controle de farmácia; sngpc; farmacêutico remoto; medicamentos isentos de prescrição (mips); rnds - rede nacional de dados em saúde; interoperabilidade; listas de substâncias entorpecentes, psicotrópicas, precursoras e outras; substâncias entorpecentes; substâncias psicotrópicas; substâncias precursoras; substâncias sob controle especial; tabela sus; saúde digital; seidigi; icp-brasil; farmácia popular; cmed
-Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
+Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; aps; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
 Cactus|Saúde|saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; pse; eca; rede de atenção psicossocial; raps; caps; centro de apoio psicossocial; programa saúde na escola; bullying; cyberbullying; eca digital
 Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doenças crônicas não transmissíveis; rotulagem de bebidas alcoólicas; educação em saúde; bebidas alcoólicas; imposto seletivo; dcnts; rotulagem de alimentos; alimentos ultraprocessados; publicidade infantil; publicidade de alimentos ultraprocessados; tributação de bebidas alcoólicas; alíquota de bebidas alcoólicas; cigarro eletrônico; controle de tabaco; violência doméstica; exposição a fatores de risco; departamento de saúde mental; hipertensão arterial; saúde digital; violência contra crianças; violência contra mulheres; feminicídio; cop 30
 Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; resolução 258 conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
@@ -322,7 +417,7 @@ def procura_termos_geral(conteudo_raspado):
     for r in conteudo_raspado["jsonArray"]:
         titulo = r.get("title", "Título não disponível")
         resumo = r.get("content", "")
-        link = URL_BASE + r.get("urlTitle", "")
+        link = URL_BASE + (r.get("urlTitle", "") or "")
         data_pub = (r.get("pubDate", "") or "")[:10]
         secao_extra = r.get("secao_extra", "")
 
@@ -334,6 +429,7 @@ def procura_termos_geral(conteudo_raspado):
 
         for palavra, patt in _PATTERNS_GERAL:
             if patt and patt.search(texto_norm):
+
                 if palavra.strip().lower() == "bebidas alcoólicas":
                     if conteudo_pagina is None:
                         conteudo_pagina = _baixar_conteudo_pagina(link)
@@ -343,6 +439,11 @@ def procura_termos_geral(conteudo_raspado):
 
                 if conteudo_pagina is None:
                     conteudo_pagina = _baixar_conteudo_pagina(link)
+
+                alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+                if _is_ato_decisao_empresa_irrelevante(alltxt):
+                    continue
+
                 if _is_blocked(conteudo_pagina):
                     continue
 
@@ -371,67 +472,75 @@ def procura_termos_clientes(conteudo_raspado):
 
     print("Buscando palavras-chave por cliente (whole-word, título+resumo)…")
     URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
-
-    agreg = {}
+    por_cliente_ag = {}  # (cliente, link) -> dict agregado (keywords em set)
 
     for r in conteudo_raspado["jsonArray"]:
         titulo = r.get("title", "Título não disponível")
         resumo = r.get("content", "")
-        link = URL_BASE + r.get("urlTitle", "")
+        link = URL_BASE + (r.get("urlTitle", "") or "")
         data_pub = (r.get("pubDate", "") or "")[:10]
         secao_extra = r.get("secao_extra", "")
+
+        if not link:
+            continue
 
         if _is_blocked(titulo + " " + resumo):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
-        conteudo_pagina = None
 
+        hits = []
         for pat, cliente, kw in CLIENT_PATTERNS:
-            if not pat.search(texto_norm):
+            if pat.search(texto_norm):
+                hits.append((cliente, kw))
+
+        if not hits:
+            continue
+
+        conteudo_pagina = _baixar_conteudo_pagina(link)
+        if _is_blocked(conteudo_pagina):
+            continue
+
+        alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
+
+        # bebidas (se acionou bebidas alcoólicas pra algum cliente)
+        if any(kw.strip().lower() == "bebidas alcoólicas" for _, kw in hits):
+            if _is_bebidas_ato_irrelevante(alltxt):
                 continue
 
-            if kw.strip().lower() == "bebidas alcoólicas":
-                if conteudo_pagina is None:
-                    conteudo_pagina = _baixar_conteudo_pagina(link)
-                alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
-                if _is_bebidas_ato_irrelevante(alltxt):
-                    continue
+        # atos/decisões de empresa (genérico)
+        if _is_ato_decisao_empresa_irrelevante(alltxt):
+            continue
 
-            if conteudo_pagina is None:
-                conteudo_pagina = _baixar_conteudo_pagina(link)
-            if _is_blocked(conteudo_pagina):
-                continue
-
-            k = (cliente, link)
-            if k not in agreg:
-                agreg[k] = {
+        # agrega por cliente + link (evita duplicar por várias palavras)
+        for cliente, kw in hits:
+            key = (cliente, link)
+            if key not in por_cliente_ag:
+                por_cliente_ag[key] = {
                     "date": data_pub,
                     "cliente": cliente,
+                    "keywords": set(),
                     "title": titulo,
                     "href": link,
                     "abstract": resumo,
-                    "content_page": conteudo_pagina or "",
+                    "content": conteudo_pagina or "",
                     "secao_extra": secao_extra,
-                    "kws": set()
                 }
-            agreg[k]["kws"].add(kw)
+            por_cliente_ag[key]["keywords"].add(kw)
 
     por_cliente = {c: [] for c in CLIENT_KEYWORDS.keys()}
-
-    for (cliente, _href), d in agreg.items():
-        kws_join = "; ".join(sorted(d["kws"], key=lambda x: x.lower()))
+    for (cliente, _link), it in por_cliente_ag.items():
+        kws = sorted(it["keywords"], key=lambda x: x.lower())
         por_cliente[cliente].append([
-            d["date"],
-            d["cliente"],
-            kws_join,
-            d["title"],
-            d["href"],
-            d["abstract"],
-            d["content_page"],
+            it["date"],
+            it["cliente"],
+            "; ".join(kws),
+            it["title"],
+            it["href"],
+            it["abstract"],
+            it["content"],
             "",
             "",
-            d["secao_extra"],
         ])
 
     return por_cliente
@@ -458,8 +567,8 @@ def _gs_client_from_env():
     return gspread.authorize(creds)
 
 
-COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
-COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
+COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo"]
+COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa"]
 
 
 def _ensure_header(ws, header):
@@ -521,8 +630,7 @@ def salva_geral_dedupe(palavras_raspadas):
                 item.get("title", ""),
                 href,
                 item.get("abstract", ""),
-                item.get("content_page", ""),
-                item.get("secao_extra", ""),
+                item.get("content_page", "")
             ]
             rows_to_insert.append(row)
             inserted_items.append({
@@ -556,6 +664,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
     _ensure_header(ws, COLS_CLIENTE)
 
     link_idx = COLS_CLIENTE.index("Link")
+    palavra_idx = COLS_CLIENTE.index("Palavra-chave")
     cliente_idx = COLS_CLIENTE.index("Cliente")
 
     all_vals = ws.get_all_values()
@@ -563,10 +672,11 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
     if len(all_vals) > 1:
         for r in all_vals[1:]:
             if len(r) > link_idx:
-                href = r[link_idx].strip()
-                cli = r[cliente_idx].strip() if len(r) > cliente_idx else ""
-                if href and cli:
-                    existing.add((href, cli))
+                existing.add((
+                    r[link_idx].strip(),
+                    r[palavra_idx].strip() if len(r) > palavra_idx else "",
+                    r[cliente_idx].strip() if len(r) > cliente_idx else ""
+                ))
 
     new_rows = []
     inserted_items = []
@@ -575,19 +685,17 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows):
         if len(r) <= link_idx:
             continue
         href = (r[link_idx] or "").strip()
+        kw = (r[palavra_idx] or "").strip()
         cli = (r[cliente_idx] or "").strip()
-        if not href or not cli:
-            continue
-
-        key = (href, cli)
-        if key in existing:
+        key = (href, kw, cli)
+        if not href or key in existing:
             continue
 
         new_rows.append(r)
         inserted_items.append({
             "date": r[0],
             "cliente": cli,
-            "keyword": r[2],
+            "keyword": kw,
             "title": r[3],
             "href": href,
             "abstract": r[5]
@@ -646,7 +754,7 @@ def _sanitize_emails(raw_list: str):
             continue
         m = EMAIL_RE.match(s)
         candidate = (m.group(2) if m else s).strip()
-        if re.match(r"^[^@\s]+@[^@\s<>@]+\.[^@\s<>@]+$", candidate) and candidate.lower() not in seen:
+        if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate) and candidate.lower() not in seen:
             seen.add(candidate.lower())
             emails.append(candidate.lower())
     return emails
@@ -674,13 +782,6 @@ def _unique_item_count(inserted_general, inserted_clients_map) -> int:
     return len(hrefs)
 
 
-def _split_kws_cell(cell: str):
-    if not cell:
-        return []
-    parts = [p.strip() for p in cell.split(";")]
-    return [p for p in parts if p]
-
-
 def _build_email_minimo_html(
     inserted_general,
     inserted_clients_map,
@@ -705,9 +806,10 @@ def _build_email_minimo_html(
 
     for cli, lst in (inserted_clients_map or {}).items():
         for it in (lst or []):
-            raw_kw = (it.get("keyword", "") or "").strip()
-            for kw in _split_kws_cell(raw_kw):
-                kw_to_clients.setdefault(kw, set()).add(cli)
+            kw = (it.get("keyword", "") or "").strip()
+            if not kw:
+                continue
+            kw_to_clients.setdefault(kw, set()).add(cli)
 
     all_kws = sorted(set(list(kw_to_general.keys()) + list(kw_to_clients.keys())), key=lambda x: x.lower())
     palavras_acionadas = len(all_kws)
@@ -734,11 +836,7 @@ def _build_email_minimo_html(
 
         lines.append(f"<li><b>{html.escape(kw)}</b> → {html.escape(destino)}</li>")
 
-    acionamentos_html = (
-        "<ul style='margin:8px 0 0 18px; padding:0;'>" + "".join(lines) + "</ul>"
-        if lines else
-        "<p style='margin:8px 0 0 0;'>—</p>"
-    )
+    acionamentos_html = "<ul style='margin:8px 0 0 18px; padding:0;'>" + "".join(lines) + "</ul>" if lines else "<p style='margin:8px 0 0 0;'>—</p>"
 
     body = f"""
     <html>
