@@ -33,10 +33,6 @@ def _wholeword_pattern(phrase: str):
         return None
     return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
-
-# =========================
-# Bloqueios (mesma linha do último)
-# =========================
 EXCLUDE_PATTERNS = [
     # CREF/CONFEF
     _wholeword_pattern("Conselho Regional de Educação Física"),
@@ -191,10 +187,6 @@ def _is_blocked(text: str) -> bool:
 
     return False
 
-
-# =========================
-# Bebidas: whitelist/exclude
-# =========================
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -219,7 +211,6 @@ _BEBIDAS_WHITELIST_TERMS = [
     "monitoramento"
 ]
 
-
 def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     nt = _normalize_ws(texto_bruto)
     if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
@@ -228,10 +219,6 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
         return True
     return False
 
-
-# =========================
-# Conteúdo da página
-# =========================
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))
 _CONTENT_CACHE = {}
 
@@ -292,10 +279,6 @@ def _baixar_conteudo_pagina(url: str) -> str:
     except Exception:
         return ""
 
-
-# =========================
-# Raspagem EXTRA
-# =========================
 def raspa_dou_extra(data=None, secoes=None):
     if data is None:
         data = datetime.now().strftime("%d-%m-%Y")
@@ -333,9 +316,6 @@ def raspa_dou_extra(data=None, secoes=None):
     return None
 
 
-# =========================
-# Palavras gerais + clientes
-# =========================
 PALAVRAS_GERAIS = [
     "Infância", "Criança", "Infantil", "Infâncias", "Crianças",
     "Educação", "Ensino", "Escolaridade",
