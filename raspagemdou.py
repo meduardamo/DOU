@@ -76,6 +76,9 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Novo Programa de Aceleração do Crescimento"),
     _wholeword_pattern("Novo Programa de Aceleracao do Crescimento"),
 
+    # Retificação
+    _wholeword_pattern("Retificação"),
+
     # Registro Especial (genérico)
     _wholeword_pattern("Registro Especial"),
     re.compile(r"\bregesp\b", re.I),
@@ -959,6 +962,7 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
 
 
 
