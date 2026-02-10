@@ -125,6 +125,8 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Radiodifusao"),
     _wholeword_pattern("Serviço de Radiodifusão"),
     _wholeword_pattern("Servico de Radiodifusao"),
+    _wholeword_pattern("Radiofrequências"),
+    _wholeword_pattern("Radiofrequência"),
     _wholeword_pattern("Outorga"),
     _wholeword_pattern("Renovação de Outorga"),
     _wholeword_pattern("Renovacao de Outorga"),
@@ -957,4 +959,5 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
 
