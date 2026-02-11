@@ -20,10 +20,8 @@ def _normalize(s: str) -> str:
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return t.lower()
 
-
 def _normalize_ws(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", _normalize(s)).strip()
-
 
 def _wholeword_pattern(phrase: str):
     toks = [t for t in _normalize_ws(phrase).split() if t]
@@ -31,9 +29,9 @@ def _wholeword_pattern(phrase: str):
         return None
     return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
-
-# BLOQUEIOS
-
+# BLOQUEIOS (DOU normal)
+# - NÃO bloqueia "MEC" sozinho (muito amplo)
+# - Mantém "E-MEC" como marcador bem específico de ruído de credenciamento
 EXCLUDE_PATTERNS = [
     # CREF/CONFEF
     _wholeword_pattern("Conselho Regional de Educação Física"),
@@ -58,6 +56,7 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Instituição de Ensino Superior"),
     _wholeword_pattern("Instituicao de Ensino Superior"),
     re.compile(r"\bIES\b", re.I),
+    _wholeword_pattern("E-MEC"),
     _wholeword_pattern("Credenciamento"),
     _wholeword_pattern("Recredenciamento"),
     _wholeword_pattern("Autorização de curso"),
@@ -78,6 +77,8 @@ EXCLUDE_PATTERNS = [
 
     # Retificação
     _wholeword_pattern("Retificação"),
+    _wholeword_pattern("Retificacao"),
+    re.compile(r"\bretifica[cç][aã]o\b", re.I),
 
     # Registro Especial (genérico)
     _wholeword_pattern("Registro Especial"),
@@ -102,9 +103,9 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Cotação eletrônica"),
     _wholeword_pattern("Cotacao eletronica"),
     re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|dispensa|inexigibilidade)\b", re.I),
-    re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o)\b", re.I),
+    re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o|chamamento\s+p[uú]blico)\b", re.I),
 
-    # Prorrogações contratuais (extratos/termos aditivos etc.) que não são "portaria"
+    # Prorrogações contratuais / extratos / termos aditivos
     _wholeword_pattern("Extrato de Contrato"),
     _wholeword_pattern("Extrato do Contrato"),
     _wholeword_pattern("Extrato de Termo Aditivo"),
@@ -123,7 +124,7 @@ EXCLUDE_PATTERNS = [
     re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio|termo)\b", re.I),
     re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
 
-    # Radiodifusão / telecom (outorga, RTV, canal etc.)
+    # Radiodifusão / telecom
     _wholeword_pattern("Radiodifusão"),
     _wholeword_pattern("Radiodifusao"),
     _wholeword_pattern("Serviço de Radiodifusão"),
@@ -136,7 +137,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Retransmissão de Televisão"),
     _wholeword_pattern("Retransmissao de Televisao"),
     re.compile(r"\b(radiodifus[aã]o|rtv|retransmiss[aã]o|outorga|canal\s+\d+)\b", re.I),
-
 ]
 
 _CNE_PATTERNS = [
@@ -150,6 +150,9 @@ _CES_PATTERNS = [
     _wholeword_pattern("Camara de Educacao Superior"),
     re.compile(r"\bCES\b", re.I),
 ]
+
+def _has_any(text_norm: str, patterns) -> bool:
+    return any(p and p.search(text_norm) for p in patterns)
 
 _DECISAO_CASE_REGEX = re.compile(
     r"\b("
@@ -179,11 +182,6 @@ _PROF_RH_PATTERNS = [
     re.compile(r"\bprofessor\s+(substituto|tempor[aá]rio|visitante)\b", re.I),
 ]
 
-
-def _has_any(text_norm: str, patterns) -> bool:
-    return any(p and p.search(text_norm) for p in patterns)
-
-
 def _is_blocked(text: str) -> bool:
     if not text:
         return False
@@ -205,10 +203,7 @@ def _is_blocked(text: str) -> bool:
 
     return False
 
-
-# =========================
 # Filtro específico "Bebidas Alcoólicas"
-# =========================
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -250,7 +245,6 @@ _BEBIDAS_WHITELIST_TERMS = [
     "monitoramento",
 ]
 
-
 def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     nt = _normalize_ws(texto_bruto)
     if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
@@ -259,10 +253,7 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
         return True
     return False
 
-
-# =========================
 # Bloqueio genérico: atos/decisões de empresa
-# =========================
 _ATO_EMPRESA_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -296,7 +287,6 @@ _ATO_EMPRESA_DECISAO_REGEX = re.compile(
     re.I
 )
 
-
 def _is_ato_decisao_empresa_irrelevante(texto_bruto: str) -> bool:
     nt = _normalize_ws(texto_bruto)
     if _ATO_EMPRESA_DECISAO_REGEX.search(nt):
@@ -313,7 +303,6 @@ _HDR = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/126 Safari/537.36",
 }
-
 
 def _baixar_conteudo_pagina(url: str) -> str:
     if not url:
@@ -388,11 +377,9 @@ def raspa_dou(data=None, secoes=None):
 
             soup = BeautifulSoup(page.text, "html.parser")
 
-            # 1) principal: <script id="params"> com JSON
             params = soup.find("script", {"id": "params"})
             raw_json = (params.text.strip() if (params and params.text) else None)
 
-            # 2) fallback: tenta extrair o JSON do HTML via regex (quando o script some)
             if not raw_json:
                 m = re.search(r'(\{"jsonArray"\s*:\s*\[.*?\]\s*\})', page.text, flags=re.S)
                 raw_json = (m.group(1).strip() if m else None)
@@ -448,7 +435,6 @@ PALAVRAS_GERAIS = [
     "OBMEP", "Olimpíada Brasileira de Matemática das Escolas Públicas", "PNLD Matemática"
 ]
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
-
 
 def procura_termos(conteudo_raspado):
     if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
@@ -522,9 +508,9 @@ Manual|Saúde|ozempic; wegovy; mounjaro; telemedicina; telessaúde; cbd; cannabi
 Mevo|Saúde|prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do sus; venda e distribuição de medicamentos; bula digital; atesta cfm; sistemas de controle de farmácia; sngpc; farmacêutico remoto; medicamentos isentos de prescrição; rede nacional de dados em saúde; interoperabilidade; listas de substâncias entorpecentes, psicotrópicas, precursoras e outras; substâncias entorpecentes; substâncias psicotrópicas; substâncias precursoras; substâncias sob controle especial; tabela sus; saúde digital; seidigi; icp-brasil; farmácia popular; cmed
 Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
 Cactus|Saúde|saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; pse; eca; rede de atenção psicossocial; raps; caps; centro de apoio psicossocial; programa saúde na escola; bullying; cyberbullying; eca digital
-Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doenças crônicas não transmissíveis; rotulagem de bebidas alcoólicas; educação em saúde; bebidas alcoólicas; imposto seletivo; dcnts; rotulagem de alimentos; alimentos ultraprocessados; publicidade infantil; publicidade de alimentos ultraprocessados; tributação de bebidas alcoólicas; alíquota de bebidas alcoólicas; cigarro eletrônico; controle de tabaco; violência doméstica; exposição a fatores de risco; departamento de saúde mental; hipertensão arterial; saúde digital; violência contra crianças; violência contra mulheres; feminicídio; cop 30
+Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doenças crônicas não transmissíveis; rotulagem de bebidas alcoólicas; educação em saúde; bebidas alcoólicas; imposto seletivo; rotulagem de alimentos; alimentos ultraprocessados; publicidade infantil; publicidade de alimentos ultraprocessados; tributação de bebidas alcoólicas; alíquota de bebidas alcoólicas; cigarro eletrônico; controle de tabaco; violência doméstica; exposição a fatores de risco; departamento de saúde mental; hipertensão arterial; saúde digital; violência contra crianças; violência contra mulheres; feminicídio; cop 30
 Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; resolução 258 conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
-IDEC|Saúde|defesa do consumidor; ação civil pública; sac; reforma tributária; ultraprocessados; doenças crônicas não transmissíveis; dcnts; obesidade; codex alimentarius; gordura trans; adoçantes; edulcorantes; rotulagem de alimentos; transgênicos; organismos geneticamente modificados; ogms; marketing e publicidade de alimentos; comunicação mercadológica; escolas e alimentação escolar; bebidas açucaradas; refrigerante; programa nacional de alimentação escolar; pnae; educação alimentar e nutricional; ean; agrotóxicos; pesticidas; defensivos fitossanitários; tributação de alimentos não saudáveis; desertos alimentares; desperdício de alimentos; segurança alimentar e nutricional; direito humano à alimentação; fome; sustentabilidade; mudança climática; plástico; gestão de resíduos; economia circular; desmatamento; greenwashing; energia elétrica; encargos tarifários; subsídios na tarifa de energia; descontos na tarifa de energia; energia pré-paga; abertura do mercado de energia para consumidor cativo; mercado livre de energia; qualidade do serviço de energia; serviço de energia; tarifa social de energia elétrica; geração térmica; combustíveis fósseis; transição energética; descarbonização da matriz elétrica; descarbonização; gases de efeito estufa; acordo de paris; objetivos do desenvolvimento sustentável; reestruturação do setor de energia; reforma do setor elétrico; modernização do setor elétrico; itens de custo da tarifa de energia elétrica; universalização do acesso à energia; eficiência energética; geração distribuída; carvão mineral; painel solar; crédito imobiliário; crédito consignado; publicidade de crédito; cartão de crédito; pagamento de fatura; parcelamento com e sem juros; cartões pré-pagos; programas de fidelidade; cheque especial; taxa de juros; contrato de crédito; endividamento de jovens; crédito estudantil; endividamento de idosos; crédito por meio de aplicativos; abertura e movimentação de conta bancária; cobrança de serviços sem autorização; cadastro positivo; contratação de serviços bancários com imposição de seguros e títulos de capitalização; acessibilidade aos canais de serviços bancários; serviços bancários; caixa eletrônico; internet banking; aplicativos móveis; contratação de pacotes de contas bancárias; acesso à informação em caso de negativa de crédito; plano de saúde; saúde suplementar; medicamentos isentos de prescrição; mip; medicamentos antibióticos; antimicrobianos; propriedade intelectual; patentes; licença compulsória; preços de medicamentos; complexo econômico-industrial da saúde; saúde digital; prontuário eletrônico; rede nacional de dados em saúde; rnds; datasus; proteção de dados pessoais; telessaúde; telecomunicações; internet; tv por assinatura; serviço de acesso condicionado; telefonia móvel; telefonia fixa; tv digital; lei geral de proteção de dados; autoridade nacional de proteção de dados; reconhecimento facial; lei geral de telecomunicações; bens reversíveis; fundo de universalização dos serviços de telecomunicações; provedores de acesso; franquia de internet; marco civil da internet; neutralidade de rede; zero rating; privacidade; lei de acesso à informação; regulação de plataformas digitais; desinformação; fake news; dados biométricos; vazamento de dados; telemarketing; serviço de valor adicionado
+IDEC|Saúde|defesa do consumidor; ação civil pública; sac; reforma tributária; ultraprocessados; doenças crônicas não transmissíveis; dcnts; obesidade; codex alimentarius; gordura trans; adoçantes; edulcorantes; rotulagem de alimentos; transgênicos; organismos geneticamente modificados; ogms; marketing e publicidade de alimentos; comunicação mercadológica; escolas e alimentação escolar; bebidas açucaradas; refrigerante; programa nacional de alimentação escolar; pnae; educação alimentar e nutricional; ean; agrotóxicos; pesticidas; defensivos fitossanitários; tributação de alimentos não saudáveis; desertos alimentares; desperdício de alimentos; segurança alimentar e nutricional; direito humano à alimentação; fome; sustentabilidade; mudança climática; plástico; gestão de resíduos; economia circular; desmatamento; greenwashing; energia elétrica; encargos tarifários; subsídios na tarifa de energia; descontos na tarifa de energia; energia pré-paga; abertura do mercado de energia para consumidor cativo; mercado livre de energia; qualidade do serviço de energia; serviço de energia; tarifa social de energia elétrica; geração térmica; combustíveis fósseis; transição energética; descarbonização da matriz elétrica; gases de efeito estufa; acordo de paris; objetivos do desenvolvimento sustentável; reestruturação do setor de energia; reforma do setor elétrico; modernização do setor elétrico; universalização do acesso à energia; eficiência energética; geração distribuída; carvão mineral; painel solar; crédito imobiliário; crédito consignado; publicidade de crédito; cartão de crédito; pagamento de fatura; parcelamento com e sem juros; cartões pré-pagos; programas de fidelidade; cheque especial; taxa de juros; contrato de crédito; endividamento de jovens; crédito estudantil; endividamento de idosos; crédito por meio de aplicativos; abertura e movimentação de conta bancária; cobrança de serviços sem autorização; cadastro positivo; contratação de serviços bancários com imposição de seguros e títulos de capitalização; acessibilidade aos canais de serviços bancários; serviços bancários; caixa eletrônico; internet banking; aplicativos móveis; contratação de pacotes de contas bancárias; acesso à informação em caso de negativa de crédito; plano de saúde; saúde suplementar; medicamentos isentos de prescrição; mip; medicamentos antibióticos; antimicrobianos; propriedade intelectual; patentes; licença compulsória; preços de medicamentos; complexo econômico-industrial da saúde; saúde digital; prontuário eletrônico; rede nacional de dados em saúde; rnds; datasus; proteção de dados pessoais; telessaúde; telecomunicações; internet; tv por assinatura; serviço de acesso condicionado; telefonia móvel; telefonia fixa; tv digital; lei geral de proteção de dados; autoridade nacional de proteção de dados; reconhecimento facial; lei geral de telecomunicações; bens reversíveis; fundo de universalização dos serviços de telecomunicações; provedores de acesso; franquia de internet; marco civil da internet; neutralidade de rede; zero rating; privacidade; lei de acesso à informação; regulação de plataformas digitais; desinformação; fake news; dados biométricos; vazamento de dados; telemarketing; serviço de valor adicionado
 """.strip()
 
 def _parse_client_keywords(text: str):
@@ -539,7 +525,6 @@ def _parse_client_keywords(text: str):
                 out[cliente].append(kw)
     return out
 
-
 CLIENT_KEYWORDS = _parse_client_keywords(CLIENT_THEME_DATA)
 
 CLIENT_PATTERNS = []
@@ -549,7 +534,6 @@ for cli, kws in CLIENT_KEYWORDS.items():
         if pat:
             CLIENT_PATTERNS.append((pat, cli, kw))
 
-
 def procura_termos_clientes(conteudo_raspado):
     if conteudo_raspado is None or "jsonArray" not in conteudo_raspado:
         print("Nenhum conteúdo para analisar (clientes).")
@@ -558,7 +542,7 @@ def procura_termos_clientes(conteudo_raspado):
     print("Buscando palavras-chave por cliente (whole-word, título+resumo)...")
     URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
 
-    agreg = {}  # (cliente, link) -> dict
+    agreg = {}
 
     for r in conteudo_raspado["jsonArray"]:
         titulo = r.get("title", "Título não disponível")
@@ -644,10 +628,8 @@ def _gs_client_from_env():
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
 
-
 COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
 COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
-
 
 def _ensure_header(ws, header):
     current = ws.row_values(1)
@@ -669,7 +651,6 @@ def _ensure_header(ws, header):
         new_col = len(current) + 1
         ws.resize(rows=max(2, ws.row_count), cols=max(ws.col_count, new_col))
         ws.update_cell(1, new_col, "Seção")
-
 
 def salva_na_base(palavras_raspadas):
     if not palavras_raspadas:
@@ -710,7 +691,6 @@ def salva_na_base(palavras_raspadas):
         print(f"{len(rows_to_append)} linhas adicionadas (geral).")
     else:
         print("Nenhum dado válido para salvar (geral).")
-
 
 def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     if not rows:
@@ -757,7 +737,6 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list[str]]):
     ws.insert_rows(new, row=2, value_input_option="USER_ENTERED")
     print(f"[{sheet_name}] +{len(new)} linhas.")
 
-
 def salva_por_cliente(por_cliente: dict):
     plan_id = os.getenv("PLANILHA_CLIENTES")
     if not plan_id:
@@ -780,7 +759,6 @@ def salva_por_cliente(por_cliente: dict):
 
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
 
-
 def _sanitize_emails(raw_list: str):
     if not raw_list:
         return []
@@ -798,7 +776,6 @@ def _sanitize_emails(raw_list: str):
             emails.append(candidate.lower())
     return emails
 
-
 def _brevo_client():
     api_key = os.getenv("BREVO_API_KEY")
     if not api_key:
@@ -806,7 +783,6 @@ def _brevo_client():
     cfg = Configuration()
     cfg.api_key["api-key"] = api_key
     return TransactionalEmailsApi(ApiClient(configuration=cfg))
-
 
 def envia_email_geral(palavras_raspadas):
     if not palavras_raspadas:
@@ -862,7 +838,6 @@ def envia_email_geral(palavras_raspadas):
         except (ApiException, Exception) as e:
             print(f"Falha ao enviar (geral) para {dest}: {e}")
 
-
 def envia_email_clientes(por_cliente: dict):
     if not por_cliente or all(not rows for rows in por_cliente.values()):
         print("Sem resultados para enviar (clientes) — nenhuma ocorrência encontrada.")
@@ -890,7 +865,7 @@ def envia_email_clientes(por_cliente: dict):
     for cliente, rows in (por_cliente or {}).items():
         if not rows:
             continue
-        kw_counts = Counter(r[2] for r in rows)  # aqui já vem "kw1; kw2"
+        kw_counts = Counter(r[2] for r in rows)
         top_kw = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3))
         sum_rows.append((cliente, len(rows), top_kw))
     sum_rows.sort(key=lambda t: t[1], reverse=True)
@@ -918,7 +893,7 @@ def envia_email_clientes(por_cliente: dict):
 
         agrupados = {}
         for r in rows:
-            kw = r[2]  # "kw1; kw2"
+            kw = r[2]
             agrupados.setdefault(kw, []).append(r)
 
         for kw, lista in sorted(agrupados.items(), key=lambda kv: len(kv[1]), reverse=True):
@@ -950,7 +925,6 @@ def envia_email_clientes(por_cliente: dict):
             print(f"E-mail (clientes) enviado para {dest}")
         except (ApiException, Exception) as e:
             print(f"Falha ao enviar (clientes) para {dest}: {e}")
-
 
 if __name__ == "__main__":
     conteudo = raspa_dou()
