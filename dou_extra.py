@@ -33,6 +33,8 @@ def _wholeword_pattern(phrase: str):
         return None
     return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
+
+# BLOQUEIOS (atualizado: remove MEC sozinho; mantém E-MEC; adiciona mais filtros gerais)
 EXCLUDE_PATTERNS = [
     # CREF/CONFEF
     _wholeword_pattern("Conselho Regional de Educação Física"),
@@ -42,13 +44,21 @@ EXCLUDE_PATTERNS = [
     re.compile(r"\bCREF\b", re.I),
     re.compile(r"\bCONFEF\b", re.I),
 
+    # CFMV/CRMV (Medicina Veterinária)
+    _wholeword_pattern("Conselho Federal de Medicina Veterinária"),
+    _wholeword_pattern("Conselho Federal de Medicina Veterinaria"),
+    _wholeword_pattern("Conselho Regional de Medicina Veterinária"),
+    _wholeword_pattern("Conselho Regional de Medicina Veterinaria"),
+    re.compile(r"\bCFMV\b", re.I),
+    re.compile(r"\bCRMV\b", re.I),
+
     # Educação superior (IES/credenciamento etc.)
     _wholeword_pattern("Educação Superior"),
     _wholeword_pattern("Educacao Superior"),
     _wholeword_pattern("Ensino Superior"),
     _wholeword_pattern("Instituição de Ensino Superior"),
     _wholeword_pattern("Instituicao de Ensino Superior"),
-    re.compile(r"\bies\b", re.I),
+    re.compile(r"\bIES\b", re.I),
     _wholeword_pattern("Credenciamento"),
     _wholeword_pattern("Recredenciamento"),
     _wholeword_pattern("Autorização de curso"),
@@ -57,7 +67,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Renovação de reconhecimento"),
     _wholeword_pattern("Renovacao de reconhecimento"),
     _wholeword_pattern("E-MEC"),
-    _wholeword_pattern("MEC"),
 
     # Acórdão
     _wholeword_pattern("Acórdão"),
@@ -69,9 +78,68 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Novo Programa de Aceleração do Crescimento"),
     _wholeword_pattern("Novo Programa de Aceleracao do Crescimento"),
 
+    # Retificação
+    _wholeword_pattern("Retificação"),
+    _wholeword_pattern("Retificacao"),
+    re.compile(r"\bretifica[cç][aã]o\b", re.I),
+
     # Registro Especial (genérico)
     _wholeword_pattern("Registro Especial"),
     re.compile(r"\bregesp\b", re.I),
+
+    # Licitações / compras públicas
+    _wholeword_pattern("Licitação"),
+    _wholeword_pattern("Licitacao"),
+    _wholeword_pattern("Pregão"),
+    _wholeword_pattern("Pregao"),
+    _wholeword_pattern("Concorrência"),
+    _wholeword_pattern("Concorrencia"),
+    _wholeword_pattern("Tomada de Preços"),
+    _wholeword_pattern("Tomada de Precos"),
+    _wholeword_pattern("Chamamento Público"),
+    _wholeword_pattern("Chamamento Publico"),
+    _wholeword_pattern("Dispensa de Licitação"),
+    _wholeword_pattern("Dispensa de Licitacao"),
+    _wholeword_pattern("Inexigibilidade"),
+    _wholeword_pattern("Aviso de Licitação"),
+    _wholeword_pattern("Aviso de Licitacao"),
+    _wholeword_pattern("Cotação eletrônica"),
+    _wholeword_pattern("Cotacao eletronica"),
+    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|dispensa|inexigibilidade)\b", re.I),
+    re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o)\b", re.I),
+
+    # Prorrogações contratuais (extratos/termos aditivos etc.) que não são "portaria"
+    _wholeword_pattern("Extrato de Contrato"),
+    _wholeword_pattern("Extrato do Contrato"),
+    _wholeword_pattern("Extrato de Termo Aditivo"),
+    _wholeword_pattern("Extrato do Termo Aditivo"),
+    _wholeword_pattern("Termo Aditivo"),
+    _wholeword_pattern("Aditamento"),
+    _wholeword_pattern("Prorrogação de Prazo"),
+    _wholeword_pattern("Prorrogacao de Prazo"),
+    _wholeword_pattern("Prorrogação de Vigência"),
+    _wholeword_pattern("Prorrogacao de Vigencia"),
+    _wholeword_pattern("Termo de Prorrogação"),
+    _wholeword_pattern("Termo de Prorrogacao"),
+    _wholeword_pattern("Vigência"),
+    _wholeword_pattern("Vigencia"),
+    _wholeword_pattern("Apostilamento"),
+    re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio|termo)\b", re.I),
+    re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
+
+    # Radiodifusão / telecom (outorga, RTV, canal etc.)
+    _wholeword_pattern("Radiodifusão"),
+    _wholeword_pattern("Radiodifusao"),
+    _wholeword_pattern("Serviço de Radiodifusão"),
+    _wholeword_pattern("Servico de Radiodifusao"),
+    _wholeword_pattern("Radiofrequências"),
+    _wholeword_pattern("Radiofrequência"),
+    _wholeword_pattern("Outorga"),
+    _wholeword_pattern("Renovação de Outorga"),
+    _wholeword_pattern("Renovacao de Outorga"),
+    _wholeword_pattern("Retransmissão de Televisão"),
+    _wholeword_pattern("Retransmissao de Televisao"),
+    re.compile(r"\b(radiodifus[aã]o|rtv|retransmiss[aã]o|outorga|canal\s+\d+)\b", re.I),
 ]
 
 _CNE_PATTERNS = [
@@ -91,7 +159,7 @@ def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 
-# Decisões/pedidos de casos particulares
+# Decisões/pedidos de casos particulares (filtro de ementas/decisões típicas de processos)
 _DECISAO_CASE_REGEX = re.compile(
     r"\b("
     r"defiro|indefiro|deferido|indeferido|homologo|homologar|concedo|conceder|"
@@ -106,7 +174,7 @@ _DECISAO_CASE_REGEX = re.compile(
     re.I
 )
 
-# Professor + CFMV/CRMV
+# Professor + CFMV/CRMV (mantém como filtro específico)
 _PROF_CFMV_CRMV_REGEX = re.compile(
     r"\b("
     r"professor|docente|magisterio|magist[ée]rio|"
@@ -173,19 +241,17 @@ def _is_blocked(text: str) -> bool:
         if pat and pat.search(nt):
             return True
 
-    # CNE + CES juntos
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
 
-    # Casos particulares
     if _DECISAO_CASE_REGEX.search(nt):
         return True
 
-    # Professor + CFMV/CRMV
     if _PROF_CFMV_CRMV_REGEX.search(nt):
         return True
 
     return False
+
 
 _BEBIDAS_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
@@ -211,6 +277,7 @@ _BEBIDAS_WHITELIST_TERMS = [
     "monitoramento"
 ]
 
+
 def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     nt = _normalize_ws(texto_bruto)
     if any(t in nt for t in _BEBIDAS_WHITELIST_TERMS):
@@ -218,6 +285,7 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     if any(t in nt for t in _BEBIDAS_EXCLUDE_TERMS):
         return True
     return False
+
 
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "49500"))
 _CONTENT_CACHE = {}
@@ -278,6 +346,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
         return txt
     except Exception:
         return ""
+
 
 def raspa_dou_extra(data=None, secoes=None):
     if data is None:
@@ -342,6 +411,7 @@ PALAVRAS_GERAIS = [
     "OBMEP", "Olimpíada Brasileira de Matemática das Escolas Públicas", "PNLD Matemática"
 ]
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
+
 
 CLIENT_THEME_DATA = """
 IAS|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação; pne
@@ -452,7 +522,7 @@ def procura_termos_clientes(conteudo_raspado):
 
     print("Buscando palavras-chave por cliente (whole-word, título+resumo)…")
     URL_BASE = "https://www.in.gov.br/en/web/dou/-/"
-    por_cliente_ag = {}  # (cliente, link) -> dict agregado (keywords em set)
+    por_cliente_ag = {}
 
     for r in conteudo_raspado["jsonArray"]:
         titulo = r.get("title", "Título não disponível")
@@ -483,16 +553,13 @@ def procura_termos_clientes(conteudo_raspado):
 
         alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
 
-        # bebidas (se acionou bebidas alcoólicas pra algum cliente)
         if any(kw.strip().lower() == "bebidas alcoólicas" for _, kw in hits):
             if _is_bebidas_ato_irrelevante(alltxt):
                 continue
 
-        # atos/decisões de empresa (genérico)
         if _is_ato_decisao_empresa_irrelevante(alltxt):
             continue
 
-        # agrega por cliente + link (evita duplicar por várias palavras)
         for cliente, kw in hits:
             key = (cliente, link)
             if key not in por_cliente_ag:
@@ -734,7 +801,7 @@ def _sanitize_emails(raw_list: str):
             continue
         m = EMAIL_RE.match(s)
         candidate = (m.group(2) if m else s).strip()
-        if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate) and candidate.lower() not in seen:
+        if re.match(r"^[^@\s]+@[^@\s<>@]+\.[^@\s<>@]+$", candidate) and candidate.lower() not in seen:
             seen.add(candidate.lower())
             emails.append(candidate.lower())
     return emails
