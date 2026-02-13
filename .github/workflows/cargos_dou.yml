@@ -31,4 +31,4 @@ jobs:
           DOU_CONTEUDO_MAX: "45000" # opcional
           SHEET_NAME: "" # opcional; vazio = primeira aba
         run: |
-          python cargosdou.py
+          python cargos_dou.py
