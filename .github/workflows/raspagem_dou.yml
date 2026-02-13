@@ -49,7 +49,7 @@ jobs:
           DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: |
-          python raspagemdou.py
+          python raspagem_dou.py
 
       # 2) Alinhamento nas abas por cliente (usa coluna "Conteúdo"; pula "Giro de notícias")
       - name: Run DOU alignment (per client tabs)
