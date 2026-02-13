@@ -17,7 +17,6 @@ TZ_BR = ZoneInfo("America/Recife")
 now_br = lambda: datetime.now(TZ_BR)
 today_dou = lambda: now_br().date().strftime("%d-%m-%Y")
 
-
 # CONFIG (tudo via env/secret)
 SHEET_ID = os.getenv("PLANILHA_CARGOS", "").strip()
 SHEET_NAME = os.getenv("SHEET_NAME", "").strip()  # se vazio: usa a primeira aba
@@ -38,9 +37,15 @@ HDR = {
 
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "45000"))
 
+# TIRA "Seção" e "Resumo"
 COLS = [
-    "Data", "Seção", "Verbos acionados", "Termos de cargo",
-    "Link", "Título", "Resumo", "Trecho", "Conteúdo"
+    "Data",
+    "Verbos acionados",
+    "Termos de cargo",
+    "Link",
+    "Título",
+    "Trecho",
+    "Conteúdo",
 ]
 
 # cargos-alvo (termos de clipping)
@@ -66,15 +71,14 @@ ORGAO_SINAL_RX = re.compile(
     r"advocacia-geral\s+da\s+uni[aã]o|agu|controladoria-geral\s+da\s+uni[aã]o|cgu|"
     r"secretaria-?geral\s+da\s+presid[eê]ncia|secretaria\s+de\s+comunica[cç][aã]o\s+social"
     r")\b",
-    re.I
+    re.I,
 )
 
 # filtro negativo simples
 EXCLUI_RUIDO_RX = re.compile(
     r"\b(universidade|instituto\s+federal|cefet|siape|reitor(a)?|pr[oó]-reitor|campus)\b",
-    re.I
+    re.I,
 )
-
 
 def _normalize(s: str) -> str:
     if s is None:
@@ -103,7 +107,6 @@ def _dedupe(items: list[str]) -> list[str]:
         out.append(x)
     return out
 
-
 def _build_term_matchers(items: list[str]):
     matchers = []
     union_pats = []
@@ -130,7 +133,6 @@ def _termos_cargo_acionados(texto: str) -> list[str]:
             out.append(termo)
     return _dedupe(out)
 
-
 def _sess():
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
@@ -151,20 +153,18 @@ def _sess():
     return s
 
 HTTP = _sess()
-_CONTENT_CACHE: dict[str, str] = {}
 
+_CONTENT_CACHE: dict[str, str] = {}
 
 def _baixar_conteudo_pagina(url: str) -> str:
     if not url:
         return ""
     if url in _CONTENT_CACHE:
         return _CONTENT_CACHE[url]
-
     try:
         r = HTTP.get(url, timeout=(10, 75), headers=HDR, allow_redirects=True)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-
         for t in soup(["script", "style", "noscript"]):
             t.decompose()
 
@@ -194,20 +194,16 @@ def _baixar_conteudo_pagina(url: str) -> str:
     except Exception:
         return ""
 
-
 def _get_jsonarray_from_leitura(data_str: str, secao: str) -> list[dict]:
     url = f"{DOU_URL_BASE}?data={data_str}&secao={secao}"
     print(url)
-
     r = HTTP.get(url, timeout=(10, 75), headers=HDR, allow_redirects=True)
     r.raise_for_status()
-
     soup = BeautifulSoup(r.text, "html.parser")
 
     params = soup.find("script", {"id": "params"})
     raw_json = (params.get_text("\n", strip=True) if params else "") or ""
     raw_json = raw_json.strip()
-
     if raw_json:
         i = raw_json.find("{")
         j = raw_json.rfind("}")
@@ -230,7 +226,6 @@ def _get_jsonarray_from_leitura(data_str: str, secao: str) -> list[dict]:
             out.append(it)
     return out
 
-
 def raspa_dou2_dia(data_str: str, secoes: list[str]) -> dict:
     combined = {"jsonArray": []}
     for sec in secoes:
@@ -243,10 +238,8 @@ def raspa_dou2_dia(data_str: str, secoes: list[str]) -> dict:
     print(f"Total coletado (DO2/DO2E): {len(combined['jsonArray'])}")
     return combined
 
-
 RESOLVE_TRECHO_RX = re.compile(
-    r"\bRESOLVE\b\s*:?\s*(?P<trecho>.*?)(?=\bRESOLVE\b|\Z)",
-    re.I | re.S
+    r"\bRESOLVE\b\s*:?\s*(?P<trecho>.*?)(?=\bRESOLVE\b|\Z)", re.I | re.S
 )
 
 def _extrai_clipping(texto: str) -> dict | None:
@@ -261,11 +254,11 @@ def _extrai_clipping(texto: str) -> dict | None:
     for r in resolves:
         if VERBOS_RX.search(r):
             resolve_ok.append(_compact_ws(r))
+
     if not resolve_ok:
         return None
 
     joined = "\n\n".join(resolve_ok)
-
     verbos = _dedupe([v.upper() for v in VERBOS_RX.findall(joined)])
     termos = _termos_cargo_acionados(joined)
 
@@ -281,7 +274,6 @@ def _extrai_clipping(texto: str) -> dict | None:
         "Termos de cargo": "; ".join(termos),
         "Trecho": trecho_final,
     }
-
 
 def procura_cargos(conteudo_raspado: dict) -> list[dict]:
     achados = []
@@ -299,14 +291,12 @@ def procura_cargos(conteudo_raspado: dict) -> list[dict]:
         pre = f"{titulo}\n{resumo}"
         if EXCLUI_RUIDO_RX.search(pre):
             continue
-
         if not CARGO_RX.search(_normalize_ws(pre)):
             continue
 
         conteudo_pagina = _baixar_conteudo_pagina(link)
         if not conteudo_pagina:
             continue
-
         if EXCLUI_RUIDO_RX.search(conteudo_pagina[:2500]):
             continue
         if not ORGAO_SINAL_RX.search(conteudo_pagina[:2500]):
@@ -316,12 +306,12 @@ def procura_cargos(conteudo_raspado: dict) -> list[dict]:
         if not clip:
             continue
 
+        # TIRA secao da chave de dedupe
         k = (
             data_pub,
-            secao,
             _normalize_ws(clip["Verbos acionados"]),
             _normalize_ws(clip["Termos de cargo"]),
-            link
+            link,
         )
         if k in seen:
             continue
@@ -329,33 +319,29 @@ def procura_cargos(conteudo_raspado: dict) -> list[dict]:
 
         achados.append({
             "Data": data_pub,
-            "Seção": secao,
             "Verbos acionados": clip["Verbos acionados"],
             "Termos de cargo": clip["Termos de cargo"],
             "Link": link,
             "Título": titulo,
-            "Resumo": resumo,
             "Trecho": clip["Trecho"],
             "Conteúdo": conteudo_pagina,
         })
 
     return achados
 
-
 def _gs_client():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-
     if not raw:
         raise RuntimeError("Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado.")
-
     info = json.loads(raw)
     if "private_key" in info and "\\n" in info["private_key"]:
         info["private_key"] = info["private_key"].replace("\\n", "\n")
-
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     return gspread.authorize(creds)
-
 
 def _ensure_header(ws, header: list[str]):
     current = ws.row_values(1)
@@ -368,13 +354,11 @@ def _ensure_header(ws, header: list[str]):
     ws.resize(rows=max(2, ws.row_count), cols=max(ws.col_count, len(header)))
     ws.update("1:1", [header])
 
-
 def _get_first_worksheet(sh):
     ws_list = sh.worksheets()
     if not ws_list:
         raise RuntimeError("Planilha sem abas.")
     return ws_list[0]
-
 
 def _load_existing_keys(ws):
     vals = ws.get_all_values()
@@ -382,7 +366,7 @@ def _load_existing_keys(ws):
         return set()
 
     idx = {c: i for i, c in enumerate(vals[0])}
-    need = ["Data", "Seção", "Verbos acionados", "Termos de cargo", "Link"]
+    need = ["Data", "Verbos acionados", "Termos de cargo", "Link"]
     if not all(c in idx for c in need):
         return set()
 
@@ -393,15 +377,13 @@ def _load_existing_keys(ws):
             return (r[i].strip() if i < len(r) else "")
         k = (
             _g("Data"),
-            _g("Seção"),
             _normalize_ws(_g("Verbos acionados")),
             _normalize_ws(_g("Termos de cargo")),
-            _g("Link")
+            _g("Link"),
         )
         if k[-1]:
             out.add(k)
     return out
-
 
 def salva_planilha(achados: list[dict]):
     if not achados:
@@ -425,7 +407,6 @@ def salva_planilha(achados: list[dict]):
     for a in achados:
         k = (
             a.get("Data", ""),
-            a.get("Seção", ""),
             _normalize_ws(a.get("Verbos acionados", "")),
             _normalize_ws(a.get("Termos de cargo", "")),
             a.get("Link", ""),
@@ -436,12 +417,10 @@ def salva_planilha(achados: list[dict]):
 
         rows.append([
             a.get("Data", ""),
-            a.get("Seção", ""),
             a.get("Verbos acionados", ""),
             a.get("Termos de cargo", ""),
             a.get("Link", ""),
             a.get("Título", ""),
-            a.get("Resumo", ""),
             a.get("Trecho", ""),
             a.get("Conteúdo", ""),
         ])
@@ -454,10 +433,8 @@ def salva_planilha(achados: list[dict]):
     ws.insert_rows(rows, row=2, value_input_option="USER_ENTERED")
     print(f"+{add} linhas anexadas.")
 
-
 if __name__ == "__main__":
     data_str = os.getenv("DOU_DATE", "").strip() or today_dou()
-
     conteudo = raspa_dou2_dia(data_str, secoes=["DO2", "DO2E"])
     achados = procura_cargos(conteudo)
     salva_planilha(achados)
