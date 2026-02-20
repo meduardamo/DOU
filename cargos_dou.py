@@ -37,7 +37,6 @@ HDR = {
 
 CONTEUDO_MAX = int(os.getenv("DOU_CONTEUDO_MAX", "45000"))
 
-# TIRA "Seção" e "Resumo"
 COLS = [
     "Data",
     "Verbos acionados",
@@ -48,7 +47,7 @@ COLS = [
     "Conteúdo",
 ]
 
-# cargos-alvo (termos de clipping)
+# cargos-alvo
 CARGOS_TERMO = [
     "Secretário-Executivo", "Secretária-Executiva",
     "Secretário Nacional", "Secretária Nacional",
@@ -64,7 +63,6 @@ CARGOS_TERMO = [
 VERBOS = ["EXONERAR", "NOMEAR", "DESIGNAR", "DISPENSAR", "TORNAR SEM EFEITO"]
 VERBOS_RX = re.compile(r"\b(" + "|".join(VERBOS) + r")\b", re.I)
 
-# “sinais” de que é executivo federal / governo central
 ORGAO_SINAL_RX = re.compile(
     r"\b("
     r"minist[eé]rio|presid[eê]ncia\s+da\s+rep[uú]blica|casa\s+civil|"
