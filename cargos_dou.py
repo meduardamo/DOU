@@ -57,7 +57,6 @@ CARGOS_TERMO = [
     "Assessoria Especial",
     "Chefe da Assessoria Especial",
     "Chefe de Assessoria Especial",
-    "Chefe da Assessoria Especial de Controle Interno",
     "Consultoria Jurídica", "CONJUR",
     "Coordenador-Geral", "Coordenadora-Geral",
     "Coordenador Geral", "Coordenadora Geral",
@@ -170,7 +169,7 @@ def _baixar_conteudo_pagina(url: str) -> str:
         for t in soup(["script", "style", "noscript"]):
             t.decompose()
 
-        # pega o texto inteiro do bloco texto-dou (mais robusto)
+        # ALTERAÇÃO: em vez de filtrar por classes específicas, pega o texto inteiro do bloco texto-dou
         bloco = soup.select_one("article#materia div.texto-dou") or soup.select_one("div.texto-dou")
         if bloco:
             txt = bloco.get_text("\n", strip=True)
@@ -286,15 +285,8 @@ def procura_cargos(conteudo_raspado: dict) -> list[dict]:
         pre = f"{titulo}\n{resumo}"
         if EXCLUI_RUIDO_RX.search(pre):
             continue
-
-        # gate mais permissivo: se não aparecer cargo no "pre", ainda tenta baixar portarias na Seção 2
-        pre_norm = _normalize_ws(pre)
-        if not CARGO_RX.search(pre_norm):
-            tit_norm = _normalize_ws(titulo)
-            if secao not in {"DO2", "DO2E"}:
-                continue
-            if not re.search(r"\bportaria(s)?\b", tit_norm, flags=re.I):
-                continue
+        if not CARGO_RX.search(_normalize_ws(pre)):
+            continue
 
         conteudo_pagina = _baixar_conteudo_pagina(link)
         if not conteudo_pagina:
