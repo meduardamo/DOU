@@ -54,6 +54,9 @@ CARGOS_TERMO = [
     "Secretário Especial", "Secretária Especial",
     "Chefe de Gabinete",
     "Assessor Especial", "Assessora Especial",
+    "Assessoria Especial",
+    "Chefe da Assessoria Especial",
+    "Chefe de Assessoria Especial",
     "Consultoria Jurídica", "CONJUR",
     "Coordenador-Geral", "Coordenadora-Geral",
     "Coordenador Geral", "Coordenadora Geral",
@@ -74,7 +77,7 @@ ORGAO_SINAL_RX = re.compile(
 
 # filtro negativo simples
 EXCLUI_RUIDO_RX = re.compile(
-    r"\b(universidade|instituto\s+federal|cefet|siape|reitor(a)?|pr[oó]-reitor|campus)\b",
+    r"\b(universidade|instituto\s+federal|cefet|reitor(a)?|pr[oó]-reitor|campus)\b",
     re.I,
 )
 
@@ -166,22 +169,15 @@ def _baixar_conteudo_pagina(url: str) -> str:
         for t in soup(["script", "style", "noscript"]):
             t.decompose()
 
+        # ALTERAÇÃO: em vez de filtrar por classes específicas, pega o texto inteiro do bloco texto-dou
         bloco = soup.select_one("article#materia div.texto-dou") or soup.select_one("div.texto-dou")
         if bloco:
-            ps = []
-            for p in bloco.find_all(["p", "li"]):
-                cls = set(p.get("class") or [])
-                if {"dou-paragraph", "identifica", "ementa"} & cls or p.name == "li":
-                    txt = p.get_text(" ", strip=True)
-                    if txt:
-                        ps.append(txt)
-            if ps:
-                txt = "\n\n".join(ps)
-                txt = re.sub(r"[ \t]+", " ", txt).strip()
-                if CONTEUDO_MAX and len(txt) > CONTEUDO_MAX:
-                    txt = txt[:CONTEUDO_MAX] + "…"
-                _CONTENT_CACHE[url] = txt
-                return txt
+            txt = bloco.get_text("\n", strip=True)
+            txt = re.sub(r"[ \t]+", " ", txt).strip()
+            if CONTEUDO_MAX and len(txt) > CONTEUDO_MAX:
+                txt = txt[:CONTEUDO_MAX] + "…"
+            _CONTENT_CACHE[url] = txt
+            return txt
 
         txt = soup.get_text(" ", strip=True)
         txt = re.sub(r"[ \t]+", " ", txt).strip()
