@@ -215,7 +215,6 @@ _BEBIDAS_EXCLUDE_TERMS = [
     "delegacia da receita federal",
     "cnpj",
     "ncm",
-    "mapa",
     "engarrafador",
     "produtor",
     "importador",
@@ -936,3 +935,4 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
