@@ -57,8 +57,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Instituicao de Ensino Superior"),
     re.compile(r"\bIES\b", re.I),
     _wholeword_pattern("E-MEC"),
-    _wholeword_pattern("Credenciamento"),
-    _wholeword_pattern("Recredenciamento"),
     _wholeword_pattern("Autorização de curso"),
     _wholeword_pattern("Autorizacao de curso"),
     _wholeword_pattern("Reconhecimento de curso"),
@@ -110,7 +108,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Extrato do Contrato"),
     _wholeword_pattern("Extrato de Termo Aditivo"),
     _wholeword_pattern("Extrato do Termo Aditivo"),
-    _wholeword_pattern("Termo Aditivo"),
     _wholeword_pattern("Aditamento"),
     _wholeword_pattern("Prorrogação de Prazo"),
     _wholeword_pattern("Prorrogacao de Prazo"),
@@ -118,8 +115,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Prorrogacao de Vigencia"),
     _wholeword_pattern("Termo de Prorrogação"),
     _wholeword_pattern("Termo de Prorrogacao"),
-    _wholeword_pattern("Vigência"),
-    _wholeword_pattern("Vigencia"),
     _wholeword_pattern("Apostilamento"),
     re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio|termo)\b", re.I),
     re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
@@ -131,7 +126,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Servico de Radiodifusao"),
     _wholeword_pattern("Radiofrequências"),
     _wholeword_pattern("Radiofrequência"),
-    _wholeword_pattern("Outorga"),
     _wholeword_pattern("Renovação de Outorga"),
     _wholeword_pattern("Renovacao de Outorga"),
     _wholeword_pattern("Retransmissão de Televisão"),
@@ -935,4 +929,5 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
 
