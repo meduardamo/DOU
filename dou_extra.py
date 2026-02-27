@@ -34,7 +34,6 @@ def _wholeword_pattern(phrase: str):
     return re.compile(r"\b" + r"\s+".join(map(re.escape, toks)) + r"\b")
 
 
-# BLOQUEIOS (atualizado: remove MEC sozinho; mantém E-MEC; adiciona mais filtros gerais)
 EXCLUDE_PATTERNS = [
     # CREF/CONFEF
     _wholeword_pattern("Conselho Regional de Educação Física"),
@@ -59,14 +58,12 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Instituição de Ensino Superior"),
     _wholeword_pattern("Instituicao de Ensino Superior"),
     re.compile(r"\bIES\b", re.I),
-    _wholeword_pattern("Credenciamento"),
-    _wholeword_pattern("Recredenciamento"),
+    _wholeword_pattern("E-MEC"),
     _wholeword_pattern("Autorização de curso"),
     _wholeword_pattern("Autorizacao de curso"),
     _wholeword_pattern("Reconhecimento de curso"),
     _wholeword_pattern("Renovação de reconhecimento"),
     _wholeword_pattern("Renovacao de reconhecimento"),
-    _wholeword_pattern("E-MEC"),
 
     # Acórdão
     _wholeword_pattern("Acórdão"),
@@ -88,12 +85,11 @@ EXCLUDE_PATTERNS = [
     re.compile(r"\bregesp\b", re.I),
 
     # Licitações / compras públicas
+    # "Dispensa" removido como termo isolado — pode colidir com "dispensa farmacêutica"
     _wholeword_pattern("Licitação"),
     _wholeword_pattern("Licitacao"),
     _wholeword_pattern("Pregão"),
     _wholeword_pattern("Pregao"),
-    _wholeword_pattern("Concorrência"),
-    _wholeword_pattern("Concorrencia"),
     _wholeword_pattern("Tomada de Preços"),
     _wholeword_pattern("Tomada de Precos"),
     _wholeword_pattern("Chamamento Público"),
@@ -105,15 +101,16 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Aviso de Licitacao"),
     _wholeword_pattern("Cotação eletrônica"),
     _wholeword_pattern("Cotacao eletronica"),
-    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|dispensa|inexigibilidade)\b", re.I),
-    re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o)\b", re.I),
+    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|inexigibilidade)\b", re.I),
+    re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o|chamamento\s+p[uú]blico)\b", re.I),
+    re.compile(r"\bdispensa\s+de\s+licita[cç][aã]o\b", re.I),
 
-    # Prorrogações contratuais (extratos/termos aditivos etc.) que não são "portaria"
+    # Prorrogações contratuais / extratos / termos aditivos
+    # "termo" removido do segundo grupo — muito genérico
     _wholeword_pattern("Extrato de Contrato"),
     _wholeword_pattern("Extrato do Contrato"),
     _wholeword_pattern("Extrato de Termo Aditivo"),
     _wholeword_pattern("Extrato do Termo Aditivo"),
-    _wholeword_pattern("Termo Aditivo"),
     _wholeword_pattern("Aditamento"),
     _wholeword_pattern("Prorrogação de Prazo"),
     _wholeword_pattern("Prorrogacao de Prazo"),
@@ -121,20 +118,17 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Prorrogacao de Vigencia"),
     _wholeword_pattern("Termo de Prorrogação"),
     _wholeword_pattern("Termo de Prorrogacao"),
-    _wholeword_pattern("Vigência"),
-    _wholeword_pattern("Vigencia"),
     _wholeword_pattern("Apostilamento"),
-    re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio|termo)\b", re.I),
+    re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio)\b", re.I),
     re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
 
-    # Radiodifusão / telecom (outorga, RTV, canal etc.)
+    # Radiodifusão / telecom
     _wholeword_pattern("Radiodifusão"),
     _wholeword_pattern("Radiodifusao"),
     _wholeword_pattern("Serviço de Radiodifusão"),
     _wholeword_pattern("Servico de Radiodifusao"),
     _wholeword_pattern("Radiofrequências"),
     _wholeword_pattern("Radiofrequência"),
-    _wholeword_pattern("Outorga"),
     _wholeword_pattern("Renovação de Outorga"),
     _wholeword_pattern("Renovacao de Outorga"),
     _wholeword_pattern("Retransmissão de Televisão"),
@@ -159,33 +153,37 @@ def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 
+# Aplicado apenas no título+resumo (texto curto).
+# Palavras específicas de atos burocráticos de credenciamento — raramente
+# aparecem em resoluções normativas legítimas.
 _DECISAO_CASE_REGEX = re.compile(
     r"\b("
-    r"defiro|indefiro|deferido|indeferido|homologo|homologar|concedo|conceder|"
-    r"autorizo|autorizar|reconheco|reconhecer|recredencio|recredenciar|"
-    r"credencio|credenciar|reconhecido|credenciado|recredenciado|"
-    r"aprovado|aprovo|aprovar|nego\s+provimento|dou\s+provimento|"
-    r"julgo|julgar|decido|decidir"
-    r")\b.*\b("
-    r"pedido|requerimento|processo|interessado|interessada|"
-    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
+    r"defiro|indefiro|deferido|indeferido|homologo|homologar|"
+    r"recredencio|recredenciar|credencio|credenciar|"
+    r"credenciado|recredenciado|"
+    r"nego\s+provimento|dou\s+provimento"
     r")\b",
     re.I
 )
 
-_PROF_CFMV_CRMV_REGEX = re.compile(
-    r"\b("
-    r"professor|docente|magisterio|magist[ée]rio|"
-    r"nomeia|nomear|designa|designar|contrata|contratar|"
-    r"admite|admitir|convoca|convocar|"
-    r"portaria|edital|chamada|selecao|sele[cç][aã]o"
-    r")\b.*\b("
-    r"cfmv|crmv|conselho\s+federal\s+de\s+medicina\s+veterinaria|"
-    r"conselho\s+regional\s+de\s+medicina\s+veterinaria"
-    r")\b",
-    re.I
-)
+# "edital" removido — pode colidir com edital de saúde pública relevante quando
+# combinado com "professor" em documentos sobre saúde escolar
+_PROF_RH_PATTERNS = [
+    re.compile(
+        r"\b(contratac(?:a|ã)o|admiss(?:a|ã)o|nomeac(?:a|ã)o|designac(?:a|ã)o|convocac(?:a|ã)o|posse|exonerac(?:a|ã)o|dispensa)\b.*\bprofessor(?:a)?\b",
+        re.I
+    ),
+    re.compile(
+        r"\bprofessor(?:a)?\b.*\b(contratac(?:a|ã)o|admiss(?:a|ã)o|nomeac(?:a|ã)o|designac(?:a|ã)o|convocac(?:a|ã)o|posse|exonerac(?:a|ã)o|dispensa)\b",
+        re.I
+    ),
+    re.compile(r"\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|concurso\s+p[uú]blico)\b.*\bprofessor(?:a)?\b", re.I),
+    re.compile(r"\bprofessor(?:a)?\b.*\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|concurso\s+p[uú]blico)\b", re.I),
+    re.compile(r"\bprofessor\s+(substituto|tempor[aá]rio|visitante)\b", re.I),
+]
 
+# "produtor" e "importador" removidos — podem colidir com
+# regulação de medicamentos/cannabis relevante para clientes de saúde
 _ATO_EMPRESA_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -195,10 +193,7 @@ _ATO_EMPRESA_EXCLUDE_TERMS = [
     "drf",
     "cnpj",
     "ncm",
-    "importador",
-    "exportador",
     "engarrafador",
-    "produtor",
     "estabelecimentos comerciais atacadistas",
     "cooperativas de produtores",
     "delegacia da receita federal",
@@ -212,9 +207,7 @@ _ATO_EMPRESA_DECISAO_REGEX = re.compile(
     r"reconheco|reconhecer|aprovo|aprovar|"
     r"torna\s+publico\s+o\s+resultado"
     r")\b.*\b("
-    r"registro\s+especial|regesp|"
-    r"pedido|requerimento|processo|interessad[oa]|"
-    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
+    r"registro\s+especial|regesp"
     r")\b",
     re.I
 )
@@ -230,6 +223,7 @@ def _is_ato_decisao_empresa_irrelevante(texto_bruto: str) -> bool:
 
 
 def _is_blocked(text: str) -> bool:
+    """Filtro para título+resumo (textos curtos do feed)."""
     if not text:
         return False
     nt = _normalize_ws(text)
@@ -244,7 +238,7 @@ def _is_blocked(text: str) -> bool:
     if _DECISAO_CASE_REGEX.search(nt):
         return True
 
-    if _PROF_CFMV_CRMV_REGEX.search(nt):
+    if _PROF_RH_PATTERNS.search(nt):
         return True
 
     return False
@@ -257,7 +251,7 @@ _BEBIDAS_EXCLUDE_TERMS = [
     "drf", "srrf", "defis", "efi2vit", "regesp",
     "delegacia da receita federal",
     "cnpj", "ncm", "mapa",
-    "engarrafador", "produtor", "importador",
+    "engarrafador",
     "marcas comerciais", "atualiza as marcas"
 ]
 
@@ -349,7 +343,6 @@ def raspa_dou_extra(data=None, secoes=None):
     if data is None:
         data = datetime.now().strftime("%d-%m-%Y")
     if secoes is None:
-        # ✅ MUDANÇA 1: Adicionado DO3E às seções padrão
         secoes = [s.strip() for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",") if s.strip()]
 
     print(f"Raspando edição EXTRA do dia {data} nas seções: {', '.join(secoes)}…")
@@ -469,7 +462,7 @@ def procura_termos_geral(conteudo_raspado):
         data_pub = (r.get("pubDate", "") or "")[:10]
         secao_extra = r.get("secao_extra", "")
 
-        # ✅ MUDANÇA 2a: Itens do DO3E não entram nos resultados gerais
+        # DO3E não entra nos resultados gerais
         if secao_extra == "DO3E":
             continue
 
@@ -494,9 +487,6 @@ def procura_termos_geral(conteudo_raspado):
 
                 alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
                 if _is_ato_decisao_empresa_irrelevante(alltxt):
-                    continue
-
-                if _is_blocked(conteudo_pagina):
                     continue
 
                 resultados_por_palavra[palavra].append({
@@ -544,7 +534,7 @@ def procura_termos_clientes(conteudo_raspado):
         hits = []
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
-                # ✅ MUDANÇA 2b: Itens do DO3E só são processados para o cliente Mevo
+                # DO3E só é processado para o cliente Mevo
                 if secao_extra == "DO3E" and cliente != "Mevo":
                     continue
                 hits.append((cliente, kw))
@@ -553,8 +543,6 @@ def procura_termos_clientes(conteudo_raspado):
             continue
 
         conteudo_pagina = _baixar_conteudo_pagina(link)
-        if _is_blocked(conteudo_pagina):
-            continue
 
         alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
 
