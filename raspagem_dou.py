@@ -355,7 +355,8 @@ def raspa_dou(data=None, secoes=None):
         data = datetime.now().strftime("%d-%m-%Y")
 
     if secoes is None:
-        secoes = [s.strip() for s in (os.getenv("DOU_SECOES") or "DO1,DO2").split(",") if s.strip()]
+        # ✅ MUDANÇA 1: Adicionado DO3 às seções padrão
+        secoes = [s.strip() for s in (os.getenv("DOU_SECOES") or "DO1,DO2,DO3").split(",") if s.strip()]
     secoes_norm = [s.upper() for s in secoes]
 
     print(f"Raspando as notícias do dia {data} nas seções: {', '.join(secoes_norm)}...")
@@ -399,7 +400,7 @@ def raspa_dou(data=None, secoes=None):
         print(f"Total de itens coletados: {len(combined['jsonArray'])}")
         return combined
 
-    print("Nenhum item encontrado em DO1/DO2.")
+    print("Nenhum item encontrado em DO1/DO2/DO3.")
     return None
 
 PALAVRAS_GERAIS = [
@@ -445,6 +446,10 @@ def procura_termos(conteudo_raspado):
         link = URL_BASE + (resultado.get("urlTitle", "") or "")
         data_pub = (resultado.get("pubDate", "") or "")[:10]
         secao = (resultado.get("secao") or "").strip()
+
+        # Itens do DO3 não entram nos resultados gerais
+        if secao == "DO3":
+            continue
 
         if _is_blocked(titulo + " " + resumo):
             continue
@@ -552,6 +557,10 @@ def procura_termos_clientes(conteudo_raspado):
 
         for pat, cliente, kw in CLIENT_PATTERNS:
             if not pat.search(texto_norm):
+                continue
+
+            # ✅ MUDANÇA 2: Itens do DO3 só são processados para o cliente Mevo
+            if secao == "DO3" and cliente != "Mevo":
                 continue
 
             if kw.strip().lower() == "bebidas alcoólicas":
@@ -929,5 +938,3 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
-
