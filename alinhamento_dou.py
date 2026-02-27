@@ -1,4 +1,4 @@
-import os, re, json, time, random
+import os, re, json, time
 import pandas as pd
 import gspread
 from gspread_dataframe import set_with_dataframe
@@ -9,8 +9,8 @@ from string import Template
 # CONFIG
 GENAI_API_KEY     = os.getenv("GENAI_API_KEY", "")
 MODEL_NAME        = "gemini-2.5-flash"
-PLANILHA_CLIENTES = os.getenv("PLANILHA_CLIENTES")  # só a key
-SKIP_SHEETS       = {"Giro de notícias"}  # pular essa aba
+PLANILHA_CLIENTES = os.getenv("PLANILHA_CLIENTES")
+SKIP_SHEETS       = {"Giro de notícias"}
 
 # Colunas esperadas
 COL_DATA     = "Data"
@@ -22,6 +22,13 @@ COL_RESUMO   = "Resumo"
 COL_CONTEUDO = "Conteúdo"
 COL_ALINH    = "Alinhamento"
 COL_JUST     = "Justificativa"
+COL_SECAO    = "Seção"
+
+COLS_CANONICAL = [
+    COL_DATA, COL_CLIENTE, COL_PALAVRA, COL_PORTARIA,
+    COL_LINK, COL_RESUMO, COL_CONTEUDO,
+    COL_ALINH, COL_JUST, COL_SECAO,
+]
 
 BATCH_SIZE = int(os.getenv("ALIGN_BATCH", "25"))
 SLEEP_SEC  = float(os.getenv("ALIGN_SLEEP", "0.10"))
@@ -31,7 +38,7 @@ CLIENTE_DESCRICOES = {
     "IU": ("Instituto Unibanco (IU)",
            "O Instituto Unibanco (IU) é uma organização sem fins lucrativos que apoia redes estaduais de ensino na melhoria da gestão educacional por meio de projetos como o Jovem de Futuro, produção de conhecimento e apoio técnico a secretarias de educação."),
     "FMCSV": ("Fundação Maria Cecilia Souto Vidigal (FMCSV)",
-              "A Fundação Maria Cecilia Souto Vidigal (FMCSV) atua pela causa da primeira infância no Brasil, conectando pesquisa, advocacy e apoio a políticas públicas para garantir o desenvolvimento integral de crianças de 0 a 6 anos; iniciativas como o “Primeira Infância Primeiro” oferecem dados e ferramentas para gestores e candidatos."),
+              "A Fundação Maria Cecilia Souto Vidigal (FMCSV) atua pela causa da primeira infância no Brasil, conectando pesquisa, advocacy e apoio a políticas públicas para garantir o desenvolvimento integral de crianças de 0 a 6 anos; iniciativas como o "Primeira Infância Primeiro" oferecem dados e ferramentas para gestores e candidatos."),
     "IEPS": ("Instituto de Estudos para Políticas de Saúde (IEPS)",
              "O Instituto de Estudos para Políticas de Saúde (IEPS) é uma organização independente e sem fins lucrativos dedicada a aprimorar políticas de saúde no Brasil, combinando pesquisa aplicada, produção de evidências e advocacy em temas como atenção primária, saúde digital e financiamento do SUS."),
     "IAS": ("Instituto Ayrton Senna (IAS)",
@@ -60,7 +67,6 @@ CLIENTE_DESCRICOES = {
               "A Umane é uma organização da sociedade civil, isenta e sem fins lucrativos, que atua para fomentar melhorias sistêmicas na saúde pública no Brasil, apoiando iniciativas baseadas em evidências para ampliar equidade, eficiência e qualidade do sistema. Trabalha com fomento a projetos, articulação com parceiros e monitoramento e avaliação, com frentes como Atenção Primária à Saúde (APS), Doenças Crônicas Não Transmissíveis (DCNT) e saúde da mulher, da criança e do adolescente.")
 }
 
-# alias sem acento, caso a aba venha como "Reuna"
 CLIENTE_DESCRICOES.setdefault("Reuna", CLIENTE_DESCRICOES["Reúna"])
 
 # PROMPT
@@ -98,23 +104,31 @@ Conteúdo:
 \"\"\"$conteudo\"\"\"
 """.strip())
 
-# CLIENTES / SHEETS
+
 def _gs_client():
     raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if raw:
         info = json.loads(raw)
         if "private_key" in info and "\\n" in info["private_key"]:
             info["private_key"] = info["private_key"].replace("\\n", "\n")
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
         creds = Credentials.from_service_account_info(info, scopes=scopes)
     else:
         creds = Credentials.from_service_account_file(
             "credentials.json",
-            scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+            scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive",
+            ],
         )
     return gspread.authorize(creds)
 
+
 genai_client = genai.Client(api_key=GENAI_API_KEY)
+
 
 def classify_text(cliente_nome: str, conteudo: str) -> dict:
     if not str(conteudo or "").strip():
@@ -122,7 +136,7 @@ def classify_text(cliente_nome: str, conteudo: str) -> dict:
 
     desc = CLIENTE_DESCRICOES.get(
         cliente_nome,
-        f"Organização '{cliente_nome}' com foco temático conforme sua atuação pública."
+        f"Organização '{cliente_nome}' com foco temático conforme sua atuação pública.",
     )
 
     prompt = PROMPT.substitute(cliente=cliente_nome, descricao=desc, conteudo=conteudo)
@@ -142,7 +156,6 @@ def classify_text(cliente_nome: str, conteudo: str) -> dict:
         data = json.loads(m.group(0))
         a = str(data.get("alinhamento", "")).strip()
         j = str(data.get("justificativa", "")).strip()
-
         if a not in ("Alinha", "Parcial", "Não Alinha", "Não se aplica"):
             a = "Parcial"
         if not j:
@@ -151,12 +164,17 @@ def classify_text(cliente_nome: str, conteudo: str) -> dict:
     except Exception:
         return {"alinhamento": "Parcial", "justificativa": "Falha ao interpretar JSON; revisão manual sugerida."}
 
-def ensure_output_cols(df: pd.DataFrame) -> pd.DataFrame:
-    if COL_ALINH not in df.columns:
-        df[COL_ALINH] = ""
-    if COL_JUST not in df.columns:
-        df[COL_JUST] = ""
+
+def _ensure_cols(df: pd.DataFrame) -> pd.DataFrame:
+    """Garante que todas as colunas canônicas existam, inclusive Seção."""
+    for col in COLS_CANONICAL:
+        if col not in df.columns:
+            df[col] = ""
+    # Reordena para a ordem canônica, preservando colunas extras no final
+    extras = [c for c in df.columns if c not in COLS_CANONICAL]
+    df = df[COLS_CANONICAL + extras]
     return df
+
 
 def pick_conteudo(row: pd.Series) -> str:
     txt = str(row.get(COL_CONTEUDO, "") or "").strip()
@@ -165,6 +183,7 @@ def pick_conteudo(row: pd.Series) -> str:
     if not txt:
         txt = str(row.get(COL_PORTARIA, "") or "").strip()
     return txt
+
 
 def process_sheet(ws) -> None:
     title = ws.title
@@ -179,16 +198,16 @@ def process_sheet(ws) -> None:
 
     header, rows = values[0], values[1:]
     df = pd.DataFrame(rows, columns=header)
-    df = ensure_output_cols(df)
+    df = _ensure_cols(df)
 
     if COL_CONTEUDO not in df.columns:
         print(f"[{title}] coluna '{COL_CONTEUDO}' não encontrada — nada a fazer.")
         return
 
     mask = (df[COL_ALINH].astype(str).str.strip() == "") & (
-        (df.get(COL_CONTEUDO, "").astype(str).str.strip() != "") |
-        (df.get(COL_RESUMO, "").astype(str).str.strip() != "") |
-        (df.get(COL_PORTARIA, "").astype(str).str.strip() != "")
+        (df[COL_CONTEUDO].astype(str).str.strip() != "")
+        | (df[COL_RESUMO].astype(str).str.strip() != "")
+        | (df[COL_PORTARIA].astype(str).str.strip() != "")
     )
     idxs = list(df[mask].index)
     if not idxs:
@@ -198,7 +217,8 @@ def process_sheet(ws) -> None:
     print(f"[{title}] classificando {len(idxs)} linha(s)...")
 
     for chunk_start in range(0, len(idxs), BATCH_SIZE):
-        for i in idxs[chunk_start:chunk_start + BATCH_SIZE]:
+        chunk = idxs[chunk_start:chunk_start + BATCH_SIZE]
+        for i in chunk:
             conteudo = pick_conteudo(df.loc[i])
             res = classify_text(title, conteudo)
             df.at[i, COL_ALINH] = res["alinhamento"]
@@ -207,7 +227,9 @@ def process_sheet(ws) -> None:
                 time.sleep(SLEEP_SEC)
 
         set_with_dataframe(ws, df, include_index=False, include_column_header=True, resize=False)
-        print(f"[{title}] ✅ salvo até a linha {idxs[min(chunk_start + BATCH_SIZE - 1, len(idxs) - 1)] + 2}")
+        ultima = idxs[min(chunk_start + BATCH_SIZE - 1, len(idxs) - 1)] + 2
+        print(f"[{title}] ✅ salvo até a linha {ultima}")
+
 
 def main():
     if not PLANILHA_CLIENTES:
@@ -218,6 +240,7 @@ def main():
 
     for ws in sh.worksheets():
         process_sheet(ws)
+
 
 if __name__ == "__main__":
     main()
