@@ -38,7 +38,7 @@ CLIENTE_DESCRICOES = {
     "IU": ("Instituto Unibanco (IU)",
            "O Instituto Unibanco (IU) é uma organização sem fins lucrativos que apoia redes estaduais de ensino na melhoria da gestão educacional por meio de projetos como o Jovem de Futuro, produção de conhecimento e apoio técnico a secretarias de educação."),
     "FMCSV": ("Fundação Maria Cecilia Souto Vidigal (FMCSV)",
-              "A Fundação Maria Cecilia Souto Vidigal (FMCSV) atua pela causa da primeira infância no Brasil, conectando pesquisa, advocacy e apoio a políticas públicas para garantir o desenvolvimento integral de crianças de 0 a 6 anos; iniciativas como o "Primeira Infância Primeiro" oferecem dados e ferramentas para gestores e candidatos."),
+              "A Fundação Maria Cecilia Souto Vidigal (FMCSV) atua pela causa da primeira infância no Brasil, conectando pesquisa, advocacy e apoio a políticas públicas para garantir o desenvolvimento integral de crianças de 0 a 6 anos; iniciativas como o \"Primeira Infância Primeiro\" oferecem dados e ferramentas para gestores e candidatos."),
     "IEPS": ("Instituto de Estudos para Políticas de Saúde (IEPS)",
              "O Instituto de Estudos para Políticas de Saúde (IEPS) é uma organização independente e sem fins lucrativos dedicada a aprimorar políticas de saúde no Brasil, combinando pesquisa aplicada, produção de evidências e advocacy em temas como atenção primária, saúde digital e financiamento do SUS."),
     "IAS": ("Instituto Ayrton Senna (IAS)",
