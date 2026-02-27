@@ -87,8 +87,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Licitacao"),
     _wholeword_pattern("Pregão"),
     _wholeword_pattern("Pregao"),
-    _wholeword_pattern("Concorrência"),
-    _wholeword_pattern("Concorrencia"),
     _wholeword_pattern("Tomada de Preços"),
     _wholeword_pattern("Tomada de Precos"),
     _wholeword_pattern("Chamamento Público"),
@@ -100,7 +98,7 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Aviso de Licitacao"),
     _wholeword_pattern("Cotação eletrônica"),
     _wholeword_pattern("Cotacao eletronica"),
-    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|dispensa|inexigibilidade)\b", re.I),
+    re.compile(r"\b(preg[aã]o|tomada\s+de\s+pre[cç]os|inexigibilidade)\b", re.I),
     re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o|chamamento\s+p[uú]blico)\b", re.I),
 
     # Prorrogações contratuais / extratos / termos aditivos
@@ -156,7 +154,6 @@ _DECISAO_CASE_REGEX = re.compile(
     r"aprovado|aprovo|aprovar|nego\s+provimento|dou\s+provimento|"
     r"julgo|julgar|decido|decidir"
     r")\b.*\b("
-    r"pedido|requerimento|processo|interessado|interessada|"
     r"credenciamento|recredenciamento|autorizacao|reconhecimento"
     r")\b",
     re.I
@@ -938,3 +935,4 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
+
