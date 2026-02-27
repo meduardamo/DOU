@@ -1,4 +1,4 @@
-name: DOU Extra
+name: DOU Extra 2
 on:
   schedule:
     - cron: '0 */3 * * *'   # a cada 3 horas
