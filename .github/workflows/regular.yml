@@ -1,0 +1,51 @@
+name: DOU Regular
+on:
+  schedule:
+    - cron: '0 10 * * *'   # 07:00 BRT
+  workflow_dispatch:
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Create credentials.json from secret
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+        run: |
+          python - <<'PY'
+          import os, json, pathlib
+          raw = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+          if not raw:
+            raise SystemExit("❌ Secret GOOGLE_APPLICATION_CREDENTIALS_JSON não encontrado.")
+          info = json.loads(raw)
+          if "private_key" in info and "\\n" in info["private_key"]:
+            info["private_key"] = info["private_key"].replace("\\n", "\n")
+          pathlib.Path("credentials.json").write_text(json.dumps(info), encoding="utf-8")
+          print("✅ credentials.json criado")
+          PY
+      - name: Run DOU scraping (regular)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA: ${{ secrets.PLANILHA }}
+          PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
+          EMAIL: ${{ secrets.EMAIL }}
+          DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: |
+          python dou_unificado.py regular
+      - name: Run DOU alignment (per client tabs)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
+          GENAI_API_KEY: ${{ secrets.GENAI_API_KEY }}
+        run: |
+          python alinhamento_dou.py
