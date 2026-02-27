@@ -267,8 +267,8 @@ _ATO_EMPRESA_DECISAO_REGEX = re.compile(
     r"\b("
     r"concede|conceder|defiro|indefiro|deferido|indeferido|"
     r"autoriza|autorizar|homologo|homologar|"
-    r"credencio|credenciar|recredencio|recredenciar|"
-    r"reconheco|reconhecer|aprovo|aprovar|"
+    r"credencio|recredencio|"
+    r"reconheco|aprovo|aprovar|"
     r"torna\s+publico\s+o\s+resultado"
     r")\b.*\b("
     r"registro\s+especial|regesp"
@@ -927,4 +927,3 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
