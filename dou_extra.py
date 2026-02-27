@@ -159,7 +159,6 @@ def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
 
-# Decisões/pedidos de casos particulares (filtro de ementas/decisões típicas de processos)
 _DECISAO_CASE_REGEX = re.compile(
     r"\b("
     r"defiro|indefiro|deferido|indeferido|homologo|homologar|concedo|conceder|"
@@ -174,7 +173,6 @@ _DECISAO_CASE_REGEX = re.compile(
     re.I
 )
 
-# Professor + CFMV/CRMV (mantém como filtro específico)
 _PROF_CFMV_CRMV_REGEX = re.compile(
     r"\b("
     r"professor|docente|magisterio|magist[ée]rio|"
@@ -188,7 +186,6 @@ _PROF_CFMV_CRMV_REGEX = re.compile(
     re.I
 )
 
-# Atos/decisões de empresa (genérico)
 _ATO_EMPRESA_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -352,6 +349,7 @@ def raspa_dou_extra(data=None, secoes=None):
     if data is None:
         data = datetime.now().strftime("%d-%m-%Y")
     if secoes is None:
+        # ✅ MUDANÇA 1: Adicionado DO3E às seções padrão
         secoes = [s.strip() for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",") if s.strip()]
 
     print(f"Raspando edição EXTRA do dia {data} nas seções: {', '.join(secoes)}…")
@@ -471,6 +469,10 @@ def procura_termos_geral(conteudo_raspado):
         data_pub = (r.get("pubDate", "") or "")[:10]
         secao_extra = r.get("secao_extra", "")
 
+        # ✅ MUDANÇA 2a: Itens do DO3E não entram nos resultados gerais
+        if secao_extra == "DO3E":
+            continue
+
         if _is_blocked(titulo + " " + resumo):
             continue
 
@@ -542,6 +544,9 @@ def procura_termos_clientes(conteudo_raspado):
         hits = []
         for pat, cliente, kw in CLIENT_PATTERNS:
             if pat.search(texto_norm):
+                # ✅ MUDANÇA 2b: Itens do DO3E só são processados para o cliente Mevo
+                if secao_extra == "DO3E" and cliente != "Mevo":
+                    continue
                 hits.append((cliente, kw))
 
         if not hits:
