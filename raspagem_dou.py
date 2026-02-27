@@ -148,13 +148,10 @@ def _has_any(text_norm: str, patterns) -> bool:
 
 _DECISAO_CASE_REGEX = re.compile(
     r"\b("
-    r"defiro|indefiro|deferido|indeferido|homologo|homologar|concedo|conceder|"
-    r"autorizo|autorizar|reconheco|reconhecer|recredencio|recredenciar|"
-    r"credencio|credenciar|reconhecido|credenciado|recredenciado|"
-    r"aprovado|aprovo|aprovar|nego\s+provimento|dou\s+provimento|"
-    r"julgo|julgar|decido|decidir"
-    r")\b.*\b("
-    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
+    r"defiro|indefiro|deferido|indeferido|homologo|homologar|"
+    r"recredencio|recredenciar|credencio|credenciar|"
+    r"credenciado|recredenciado|"
+    r"nego\s+provimento|dou\s+provimento"
     r")\b",
     re.I
 )
@@ -271,8 +268,6 @@ _ATO_EMPRESA_DECISAO_REGEX = re.compile(
     r"torna\s+publico\s+o\s+resultado"
     r")\b.*\b("
     r"registro\s+especial|regesp|"
-    r"pedido|requerimento|processo|interessad[oa]|"
-    r"credenciamento|recredenciamento|autorizacao|reconhecimento"
     r")\b",
     re.I
 )
