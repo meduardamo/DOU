@@ -57,6 +57,8 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Instituicao de Ensino Superior"),
     re.compile(r"\bIES\b", re.I),
     _wholeword_pattern("E-MEC"),
+    _wholeword_pattern("Credenciamento"),
+    _wholeword_pattern("Recredenciamento"),
     _wholeword_pattern("Autorização de curso"),
     _wholeword_pattern("Autorizacao de curso"),
     _wholeword_pattern("Reconhecimento de curso"),
@@ -87,6 +89,8 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Licitacao"),
     _wholeword_pattern("Pregão"),
     _wholeword_pattern("Pregao"),
+    _wholeword_pattern("Concorrência"),
+    _wholeword_pattern("Concorrencia"),
     _wholeword_pattern("Tomada de Preços"),
     _wholeword_pattern("Tomada de Precos"),
     _wholeword_pattern("Chamamento Público"),
@@ -98,7 +102,7 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Aviso de Licitacao"),
     _wholeword_pattern("Cotação eletrônica"),
     _wholeword_pattern("Cotacao eletronica"),
-    re.compile(r"\b(preg[aã]o|tomada\s+de\s+pre[cç]os|inexigibilidade)\b", re.I),
+    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|dispensa|inexigibilidade)\b", re.I),
     re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o|chamamento\s+p[uú]blico)\b", re.I),
 
     # Prorrogações contratuais / extratos / termos aditivos
@@ -106,6 +110,7 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Extrato do Contrato"),
     _wholeword_pattern("Extrato de Termo Aditivo"),
     _wholeword_pattern("Extrato do Termo Aditivo"),
+    _wholeword_pattern("Termo Aditivo"),
     _wholeword_pattern("Aditamento"),
     _wholeword_pattern("Prorrogação de Prazo"),
     _wholeword_pattern("Prorrogacao de Prazo"),
@@ -113,6 +118,8 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Prorrogacao de Vigencia"),
     _wholeword_pattern("Termo de Prorrogação"),
     _wholeword_pattern("Termo de Prorrogacao"),
+    _wholeword_pattern("Vigência"),
+    _wholeword_pattern("Vigencia"),
     _wholeword_pattern("Apostilamento"),
     re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio|termo)\b", re.I),
     re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
@@ -124,6 +131,7 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Servico de Radiodifusao"),
     _wholeword_pattern("Radiofrequências"),
     _wholeword_pattern("Radiofrequência"),
+    _wholeword_pattern("Outorga"),
     _wholeword_pattern("Renovação de Outorga"),
     _wholeword_pattern("Renovacao de Outorga"),
     _wholeword_pattern("Retransmissão de Televisão"),
@@ -146,6 +154,9 @@ _CES_PATTERNS = [
 def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
 
+# Aplicado apenas no título+resumo (texto curto).
+# Palavras específicas de atos burocráticos de credenciamento — raramente
+# aparecem em resoluções normativas legítimas.
 _DECISAO_CASE_REGEX = re.compile(
     r"\b("
     r"defiro|indefiro|deferido|indeferido|homologo|homologar|"
@@ -171,6 +182,7 @@ _PROF_RH_PATTERNS = [
 ]
 
 def _is_blocked(text: str) -> bool:
+    """Filtro para título+resumo (textos curtos do feed)."""
     if not text:
         return False
     nt = _normalize_ws(text)
@@ -203,6 +215,7 @@ _BEBIDAS_EXCLUDE_TERMS = [
     "delegacia da receita federal",
     "cnpj",
     "ncm",
+    "mapa",
     "engarrafador",
     "produtor",
     "importador",
@@ -267,7 +280,7 @@ _ATO_EMPRESA_DECISAO_REGEX = re.compile(
     r"reconheco|reconhecer|aprovo|aprovar|"
     r"torna\s+publico\s+o\s+resultado"
     r")\b.*\b("
-    r"registro\s+especial|regesp|"
+    r"registro\s+especial|regesp"
     r")\b",
     re.I
 )
@@ -347,7 +360,6 @@ def raspa_dou(data=None, secoes=None):
         data = datetime.now().strftime("%d-%m-%Y")
 
     if secoes is None:
-        # ✅ MUDANÇA 1: Adicionado DO3 às seções padrão
         secoes = [s.strip() for s in (os.getenv("DOU_SECOES") or "DO1,DO2,DO3").split(",") if s.strip()]
     secoes_norm = [s.upper() for s in secoes]
 
@@ -439,7 +451,7 @@ def procura_termos(conteudo_raspado):
         data_pub = (resultado.get("pubDate", "") or "")[:10]
         secao = (resultado.get("secao") or "").strip()
 
-        # Itens do DO3 não entram nos resultados gerais
+        # DO3 não entra nos resultados gerais
         if secao == "DO3":
             continue
 
@@ -464,9 +476,6 @@ def procura_termos(conteudo_raspado):
 
                 alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
                 if _is_ato_decisao_empresa_irrelevante(alltxt):
-                    continue
-
-                if _is_blocked(conteudo_pagina):
                     continue
 
                 resultados_por_palavra[palavra].append({
@@ -551,7 +560,7 @@ def procura_termos_clientes(conteudo_raspado):
             if not pat.search(texto_norm):
                 continue
 
-            # ✅ MUDANÇA 2: Itens do DO3 só são processados para o cliente Mevo
+            # DO3 só é processado para o cliente Mevo
             if secao == "DO3" and cliente != "Mevo":
                 continue
 
@@ -567,9 +576,6 @@ def procura_termos_clientes(conteudo_raspado):
 
             alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
             if _is_ato_decisao_empresa_irrelevante(alltxt):
-                continue
-
-            if _is_blocked(conteudo_pagina):
                 continue
 
             key = (cliente, link)
@@ -930,4 +936,3 @@ if __name__ == "__main__":
     por_cliente = procura_termos_clientes(conteudo)
     salva_por_cliente(por_cliente)
     envia_email_clientes(por_cliente)
-
