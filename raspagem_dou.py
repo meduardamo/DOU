@@ -83,6 +83,7 @@ EXCLUDE_PATTERNS = [
     re.compile(r"\bregesp\b", re.I),
 
     # Licitações / compras públicas
+    # "Dispensa" removido como termo isolado — pode colidir com "dispensa farmacêutica"
     _wholeword_pattern("Licitação"),
     _wholeword_pattern("Licitacao"),
     _wholeword_pattern("Pregão"),
@@ -98,10 +99,12 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Aviso de Licitacao"),
     _wholeword_pattern("Cotação eletrônica"),
     _wholeword_pattern("Cotacao eletronica"),
-    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|dispensa|inexigibilidade)\b", re.I),
+    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|inexigibilidade)\b", re.I),
     re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o|chamamento\s+p[uú]blico)\b", re.I),
+    re.compile(r"\bdispensa\s+de\s+licita[cç][aã]o\b", re.I),
 
     # Prorrogações contratuais / extratos / termos aditivos
+    # "termo" removido do segundo grupo — muito genérico
     _wholeword_pattern("Extrato de Contrato"),
     _wholeword_pattern("Extrato do Contrato"),
     _wholeword_pattern("Extrato de Termo Aditivo"),
@@ -114,7 +117,7 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Termo de Prorrogação"),
     _wholeword_pattern("Termo de Prorrogacao"),
     _wholeword_pattern("Apostilamento"),
-    re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio|termo)\b", re.I),
+    re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio)\b", re.I),
     re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
 
     # Radiodifusão / telecom
@@ -159,6 +162,8 @@ _DECISAO_CASE_REGEX = re.compile(
     re.I
 )
 
+# "edital" removido — pode colidir com edital de saúde pública relevante quando
+# combinado com "professor" em documentos sobre saúde escolar
 _PROF_RH_PATTERNS = [
     re.compile(
         r"\b(contratac(?:a|ã)o|admiss(?:a|ã)o|nomeac(?:a|ã)o|designac(?:a|ã)o|convocac(?:a|ã)o|posse|exonerac(?:a|ã)o|dispensa)\b.*\bprofessor(?:a)?\b",
@@ -168,8 +173,8 @@ _PROF_RH_PATTERNS = [
         r"\bprofessor(?:a)?\b.*\b(contratac(?:a|ã)o|admiss(?:a|ã)o|nomeac(?:a|ã)o|designac(?:a|ã)o|convocac(?:a|ã)o|posse|exonerac(?:a|ã)o|dispensa)\b",
         re.I
     ),
-    re.compile(r"\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|edital|concurso\s+p[uú]blico)\b.*\bprofessor(?:a)?\b", re.I),
-    re.compile(r"\bprofessor(?:a)?\b.*\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|edital|concurso\s+p[uú]blico)\b", re.I),
+    re.compile(r"\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|concurso\s+p[uú]blico)\b.*\bprofessor(?:a)?\b", re.I),
+    re.compile(r"\bprofessor(?:a)?\b.*\b(processo\s+seletivo|selec(?:a|ã)o\s+simplificada|concurso\s+p[uú]blico)\b", re.I),
     re.compile(r"\bprofessor\s+(substituto|tempor[aá]rio|visitante)\b", re.I),
 ]
 
@@ -208,8 +213,6 @@ _BEBIDAS_EXCLUDE_TERMS = [
     "cnpj",
     "ncm",
     "engarrafador",
-    "produtor",
-    "importador",
     "marcas comerciais",
     "atualiza as marcas",
 ]
@@ -245,6 +248,8 @@ def _is_bebidas_ato_irrelevante(texto_bruto: str) -> bool:
     return False
 
 # Bloqueio genérico: atos/decisões de empresa
+# "produtor" e "importador" removidos — podem colidir com
+# regulação de medicamentos/cannabis relevante para clientes de saúde
 _ATO_EMPRESA_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -254,10 +259,7 @@ _ATO_EMPRESA_EXCLUDE_TERMS = [
     "drf",
     "cnpj",
     "ncm",
-    "importador",
-    "exportador",
     "engarrafador",
-    "produtor",
     "estabelecimentos comerciais atacadistas",
     "cooperativas de produtores",
     "delegacia da receita federal",
