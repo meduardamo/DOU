@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import re
 import json
@@ -7,6 +8,8 @@ import requests
 import gspread
 from bs4 import BeautifulSoup
 from datetime import datetime
+from collections import Counter
+
 from google.oauth2.service_account import Credentials
 
 from brevo_python import ApiClient, Configuration
@@ -347,11 +350,6 @@ def _baixar_conteudo_pagina(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _raspa_secoes(data: str, secoes: list[str], campo_secao: str = "secao") -> dict | None:
-    """
-    Raspagem genérica. Funciona tanto para edições regulares (DO1/DO2/DO3)
-    quanto para edições extras (DO1E/DO2E/DO3E).
-    `campo_secao` é a chave que será adicionada a cada item do jsonArray.
-    """
     combined: dict[str, list] = {"jsonArray": []}
 
     for sec in secoes:
@@ -443,66 +441,10 @@ PALAVRAS_GERAIS = [
 ]
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
-
-# ---------------------------------------------------------------------------
-# Palavras-chave por cliente
-# ---------------------------------------------------------------------------
-
-CLIENT_THEME_DATA = """
-IAS|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação
-ISG|Educação|tempo integral; fundeb; ensino técnico profissionalizante; educação profissional e tecnológica; FNDE; ensino médio; propag; infraestrutura escolar; ensino fundamental integral; alfabetização integral; escola em tempo integral; programa escola em tempo integral; ensino fundamental em tempo integral
-IU|Educação|recomposição da aprendizagem; educação em tempo integral; fundeb; educação e equidade; educação profissional e tecnológica; ensino técnico profissionalizante; FNDE
-Reúna|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação; emendas parlamentares
-REMS|Esportes|esporte e desenvolvimento social; esporte e educação; esporte e equidade; paradesporto; desenvolvimento social; esporte educacional
-FMCSV|Primeira infância|criança; criança feliz; alfabetização; creche; conanda; maternidade; parentalidade; paternidade; primeira infância; infantil; infância; fundeb; educação básica; plano nacional de educação; homeschooling; FNDE
-IEPS|Saúde|sus; sistema único de saúde; equidade em saúde; atenção primária à saúde; vigilância epidemiológica; planos de saúde; caps; seguros de saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; economia solidária em saúde mental; pessoa em situação de rua; saúde mental; fiscalização de comunidades terapêuticas; rede de atenção psicossocial; raps; unidades de acolhimento; assistência multiprofissional; centros de convivência; cannabis; canabidiol; tratamento terapêutico; desinstitucionalização; manicômios; hospitais de custódia; saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; dependência química; vícios; ludopatia; treinamento; capacitação em saúde mental; intervenções terapêuticas em saúde mental; internet e redes sociais na saúde mental; violência psicológica; surto psicótico
-Manual|Saúde|ozempic; wegovy; mounjaro; telemedicina; telessaúde; cbd; cannabis medicinal; cfm; conselho federal de medicina; farmácia magistral; medicamentos manipulados; minoxidil; emagrecedores; retenção de receita; tirzepatida; liraglutida
-Mevo|Saúde|prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do sus; venda e distribuição de medicamentos; bula digital; atesta cfm; sistemas de controle de farmácia; sngpc; farmacêutico remoto; medicamentos isentos de prescrição; rede nacional de dados em saúde; interoperabilidade; listas de substâncias entorpecentes, psicotrópicas, precursoras e outras; substâncias entorpecentes; substâncias psicotrópicas; substâncias precursoras; substâncias sob controle especial; tabela sus; saúde digital; seidigi; icp-brasil; farmácia popular; cmed
-Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
-Cactus|Saúde|saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; pse; eca; rede de atenção psicossocial; raps; caps; centro de apoio psicossocial; programa saúde na escola; bullying; cyberbullying; eca digital
-Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doenças crônicas não transmissíveis; rotulagem de bebidas alcoólicas; educação em saúde; bebidas alcoólicas; imposto seletivo; rotulagem de alimentos; alimentos ultraprocessados; publicidade infantil; publicidade de alimentos ultraprocessados; tributação de bebidas alcoólicas; alíquota de bebidas alcoólicas; cigarro eletrônico; controle de tabaco; violência doméstica; exposição a fatores de risco; departamento de saúde mental; hipertensão arterial; saúde digital; violência contra crianças; violência contra mulheres; feminicídio; cop 30
-Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; resolução 258 conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
-IDEC|Saúde|defesa do consumidor; ação civil pública; sac; reforma tributária; ultraprocessados; doenças crônicas não transmissíveis; dcnts; obesidade; codex alimentarius; gordura trans; adoçantes; edulcorantes; rotulagem de alimentos; transgênicos; organismos geneticamente modificados; ogms; marketing e publicidade de alimentos; comunicação mercadológica; escolas e alimentação escolar; bebidas açucaradas; refrigerante; programa nacional de alimentação escolar; pnae; educação alimentar e nutricional; ean; agrotóxicos; pesticidas; defensivos fitossanitários; tributação de alimentos não saudáveis; desertos alimentares; desperdício de alimentos; segurança alimentar e nutricional; direito humano à alimentação; fome; sustentabilidade; mudança climática; plástico; gestão de resíduos; economia circular; desmatamento; greenwashing; energia elétrica; encargos tarifários; subsídios na tarifa de energia; descontos na tarifa de energia; energia pré-paga; abertura do mercado de energia para consumidor cativo; mercado livre de energia; qualidade do serviço de energia; serviço de energia; tarifa social de energia elétrica; geração térmica; combustíveis fósseis; transição energética; descarbonização da matriz elétrica; gases de efeito estufa; acordo de paris; objetivos do desenvolvimento sustentável; reestruturação do setor de energia; reforma do setor elétrico; modernização do setor elétrico; universalização do acesso à energia; eficiência energética; geração distribuída; carvão mineral; painel solar; crédito imobiliário; crédito consignado; publicidade de crédito; cartão de crédito; pagamento de fatura; parcelamento com e sem juros; cartões pré-pagos; programas de fidelidade; cheque especial; taxa de juros; contrato de crédito; endividamento de jovens; crédito estudantil; endividamento de idosos; crédito por meio de aplicativos; abertura e movimentação de conta bancária; cobrança de serviços sem autorização; cadastro positivo; contratação de serviços bancários com imposição de seguros e títulos de capitalização; acessibilidade aos canais de serviços bancários; serviços bancários; caixa eletrônico; internet banking; aplicativos móveis; contratação de pacotes de contas bancárias; acesso à informação em caso de negativa de crédito; plano de saúde; saúde suplementar; medicamentos isentos de prescrição; mip; medicamentos antibióticos; antimicrobianos; propriedade intelectual; patentes; licença compulsória; preços de medicamentos; complexo econômico-industrial da saúde; saúde digital; prontuário eletrônico; rede nacional de dados em saúde; rnds; datasus; proteção de dados pessoais; telessaúde; telecomunicações; internet; tv por assinatura; serviço de acesso condicionado; telefonia móvel; telefonia fixa; tv digital; lei geral de proteção de dados; autoridade nacional de proteção de dados; reconhecimento facial; lei geral de telecomunicações; bens reversíveis; fundo de universalização dos serviços de telecomunicações; provedores de acesso; franquia de internet; marco civil da internet; neutralidade de rede; zero rating; privacidade; lei de acesso à informação; regulação de plataformas digitais; desinformação; fake news; dados biométricos; vazamento de dados; telemarketing; serviço de valor adicionado
-""".strip()
-
-
-def _parse_client_keywords(text: str) -> dict[str, list[str]]:
-    out: dict[str, list[str]] = {}
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        cliente, _tema, kws = [x.strip() for x in line.split("|", 2)]
-        out.setdefault(cliente, [])
-        for kw in [k.strip() for k in kws.split(";") if k.strip()]:
-            if kw not in out[cliente]:
-                out[cliente].append(kw)
-    return out
-
-
-CLIENT_KEYWORDS = _parse_client_keywords(CLIENT_THEME_DATA)
-
-CLIENT_PATTERNS: list[tuple] = []
-for _cli, _kws in CLIENT_KEYWORDS.items():
-    for _kw in _kws:
-        _pat = _wholeword_pattern(_kw)
-        if _pat:
-            CLIENT_PATTERNS.append((_pat, _cli, _kw))
-
-
-# ---------------------------------------------------------------------------
-# Busca de termos — geral
-# ---------------------------------------------------------------------------
-
-# Seções que NÃO entram nos resultados gerais, por tipo de edição
 _SECAO_GERAL_BLOQUEADAS = {"DO3", "DO3E"}
 
 
 def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") -> dict | None:
-    """
-    Busca palavras-chave gerais. Funciona para edição regular e extra.
-    `campo_secao` deve corresponder ao campo usado na raspagem ("secao" ou "secao" — ambos
-    são chamados de "secao" agora, pois _raspa_secoes usa campo_secao="secao" em ambos os casos).
-    """
     if not conteudo_raspado or "jsonArray" not in conteudo_raspado:
         print("Nenhum conteúdo para analisar (geral).")
         return None
@@ -562,8 +504,49 @@ def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") ->
 
 
 # ---------------------------------------------------------------------------
-# Busca de termos — por cliente
+# Palavras-chave por cliente
 # ---------------------------------------------------------------------------
+
+CLIENT_THEME_DATA = """
+IAS|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação
+ISG|Educação|tempo integral; fundeb; ensino técnico profissionalizante; educação profissional e tecnológica; FNDE; ensino médio; propag; infraestrutura escolar; ensino fundamental integral; alfabetização integral; escola em tempo integral; programa escola em tempo integral; ensino fundamental em tempo integral
+IU|Educação|recomposição da aprendizagem; educação em tempo integral; fundeb; educação e equidade; educação profissional e tecnológica; ensino técnico profissionalizante; FNDE
+Reúna|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação; emendas parlamentares
+REMS|Esportes|esporte e desenvolvimento social; esporte e educação; esporte e equidade; paradesporto; desenvolvimento social; esporte educacional
+FMCSV|Primeira infância|criança; criança feliz; alfabetização; creche; conanda; maternidade; parentalidade; paternidade; primeira infância; infantil; infância; fundeb; educação básica; plano nacional de educação; homeschooling; FNDE
+IEPS|Saúde|sus; sistema único de saúde; equidade em saúde; atenção primária à saúde; vigilância epidemiológica; planos de saúde; caps; seguros de saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; economia solidária em saúde mental; pessoa em situação de rua; saúde mental; fiscalização de comunidades terapêuticas; rede de atenção psicossocial; raps; unidades de acolhimento; assistência multiprofissional; centros de convivência; cannabis; canabidiol; tratamento terapêutico; desinstitucionalização; manicômios; hospitais de custódia; saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; dependência química; vícios; ludopatia; treinamento; capacitação em saúde mental; intervenções terapêuticas em saúde mental; internet e redes sociais na saúde mental; violência psicológica; surto psicótico
+Manual|Saúde|ozempic; wegovy; mounjaro; telemedicina; telessaúde; cbd; cannabis medicinal; cfm; conselho federal de medicina; farmácia magistral; medicamentos manipulados; minoxidil; emagrecedores; retenção de receita; tirzepatida; liraglutida
+Mevo|Saúde|prontuário eletrônico; dispensação eletrônica; telessaúde; assinatura digital; certificado digital; controle sanitário; prescrição por enfermeiros; doenças crônicas; responsabilização de plataformas digitais; regulamentação de marketplaces; segurança cibernética; inteligência artificial; digitalização do sus; venda e distribuição de medicamentos; bula digital; atesta cfm; sistemas de controle de farmácia; sngpc; farmacêutico remoto; medicamentos isentos de prescrição; rede nacional de dados em saúde; interoperabilidade; listas de substâncias entorpecentes, psicotrópicas, precursoras e outras; substâncias entorpecentes; substâncias psicotrópicas; substâncias precursoras; substâncias sob controle especial; tabela sus; saúde digital; seidigi; icp-brasil; farmácia popular; cmed
+Umane|Saúde|sus; sistema único de saúde; atenção primária à saúde; vigilância epidemiológica; planos de saúde; caps; equidade em saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; conass; conasems
+Cactus|Saúde|saúde mental; saúde mental para meninas; saúde mental para juventude; saúde mental para mulheres; pse; eca; rede de atenção psicossocial; raps; caps; centro de apoio psicossocial; programa saúde na escola; bullying; cyberbullying; eca digital
+Vital Strategies|Saúde|saúde mental; dados para a saúde; morte evitável; doenças crônicas não transmissíveis; rotulagem de bebidas alcoólicas; educação em saúde; bebidas alcoólicas; imposto seletivo; rotulagem de alimentos; alimentos ultraprocessados; publicidade infantil; publicidade de alimentos ultraprocessados; tributação de bebidas alcoólicas; alíquota de bebidas alcoólicas; cigarro eletrônico; controle de tabaco; violência doméstica; exposição a fatores de risco; departamento de saúde mental; hipertensão arterial; saúde digital; violência contra crianças; violência contra mulheres; feminicídio; cop 30
+Coletivo Feminista|Direitos reprodutivos|aborto; nascituro; gestação acima de 22 semanas; interrupção legal da gestação; interrupção da gestação; resolução 258 conanda; vida por nascer; vida desde a concepção; criança por nascer; infanticídio; feticídio; assistolia fetal; medicamento abortivo; misoprostol; citotec; cytotec; mifepristona; ventre; assassinato de bebês; luto parental; síndrome pós aborto
+IDEC|Saúde|defesa do consumidor; ação civil pública; sac; reforma tributária; ultraprocessados; doenças crônicas não transmissíveis; dcnts; obesidade; codex alimentarius; gordura trans; adoçantes; edulcorantes; rotulagem de alimentos; transgênicos; organismos geneticamente modificados; ogms; marketing e publicidade de alimentos; comunicação mercadológica; escolas e alimentação escolar; bebidas açucaradas; refrigerante; programa nacional de alimentação escolar; pnae; educação alimentar e nutricional; ean; agrotóxicos; pesticidas; defensivos fitossanitários; tributação de alimentos não saudáveis; desertos alimentares; desperdício de alimentos; segurança alimentar e nutricional; direito humano à alimentação; fome; sustentabilidade; mudança climática; plástico; gestão de resíduos; economia circular; desmatamento; greenwashing; energia elétrica; encargos tarifários; subsídios na tarifa de energia; descontos na tarifa de energia; energia pré-paga; abertura do mercado de energia para consumidor cativo; mercado livre de energia; qualidade do serviço de energia; serviço de energia; tarifa social de energia elétrica; geração térmica; combustíveis fósseis; transição energética; descarbonização da matriz elétrica; gases de efeito estufa; acordo de paris; objetivos do desenvolvimento sustentável; reestruturação do setor de energia; reforma do setor elétrico; modernização do setor elétrico; universalização do acesso à energia; eficiência energética; geração distribuída; carvão mineral; painel solar; crédito imobiliário; crédito consignado; publicidade de crédito; cartão de crédito; pagamento de fatura; parcelamento com e sem juros; cartões pré-pagos; programas de fidelidade; cheque especial; taxa de juros; contrato de crédito; endividamento de jovens; crédito estudantil; endividamento de idosos; crédito por meio de aplicativos; abertura e movimentação de conta bancária; cobrança de serviços sem autorização; cadastro positivo; contratação de serviços bancários com imposição de seguros e títulos de capitalização; acessibilidade aos canais de serviços bancários; serviços bancários; caixa eletrônico; internet banking; aplicativos móveis; contratação de pacotes de contas bancárias; acesso à informação em caso de negativa de crédito; plano de saúde; saúde suplementar; medicamentos isentos de prescrição; mip; medicamentos antibióticos; antimicrobianos; propriedade intelectual; patentes; licença compulsória; preços de medicamentos; complexo econômico-industrial da saúde; saúde digital; prontuário eletrônico; rede nacional de dados em saúde; rnds; datasus; proteção de dados pessoais; telessaúde; telecomunicações; internet; tv por assinatura; serviço de acesso condicionado; telefonia móvel; telefonia fixa; tv digital; lei geral de proteção de dados; autoridade nacional de proteção de dados; reconhecimento facial; lei geral de telecomunicações; bens reversíveis; fundo de universalização dos serviços de telecomunicações; provedores de acesso; franquia de internet; marco civil da internet; neutralidade de rede; zero rating; privacidade; lei de acesso à informação; regulação de plataformas digitais; desinformação; fake news; dados biométricos; vazamento de dados; telemarketing; serviço de valor adicionado
+""".strip()
+
+
+def _parse_client_keywords(text: str) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        cliente, _tema, kws = [x.strip() for x in line.split("|", 2)]
+        out.setdefault(cliente, [])
+        for kw in [k.strip() for k in kws.split(";") if k.strip()]:
+            if kw not in out[cliente]:
+                out[cliente].append(kw)
+    return out
+
+
+CLIENT_KEYWORDS = _parse_client_keywords(CLIENT_THEME_DATA)
+
+CLIENT_PATTERNS: list[tuple] = []
+for _cli, _kws in CLIENT_KEYWORDS.items():
+    for _kw in _kws:
+        _pat = _wholeword_pattern(_kw)
+        if _pat:
+            CLIENT_PATTERNS.append((_pat, _cli, _kw))
+
 
 def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "secao") -> dict[str, list]:
     if not conteudo_raspado or "jsonArray" not in conteudo_raspado:
@@ -591,7 +574,6 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
         for pat, cliente, kw in CLIENT_PATTERNS:
             if not pat.search(texto_norm):
                 continue
-            # DO3 / DO3E só para Mevo
             if secao in {"DO3", "DO3E"} and cliente != "Mevo":
                 continue
             hits.append((cliente, kw))
@@ -686,7 +668,6 @@ def _ws_gid(ws) -> str:
 
 
 def salva_na_base(palavras_raspadas: dict | None) -> tuple[int, list, object | None, object | None]:
-    """Salva resultados gerais na planilha (com deduplicação). Retorna (qtd, itens, sh, ws)."""
     if not palavras_raspadas:
         print("Sem resultados gerais para salvar.")
         return 0, [], None, None
@@ -799,6 +780,7 @@ def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list]) -> tuple[i
             "title": r[3],
             "href": href,
             "abstract": r[5],
+            "secao": r[-1] if len(r) else "",
         })
         existing.add(key)
 
@@ -840,8 +822,16 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
 
 
 # ---------------------------------------------------------------------------
-# E-mail
+# E-mail (AGORA: 2 e-mails por edição -> Geral + Clientes)
 # ---------------------------------------------------------------------------
+
+# Variáveis esperadas:
+# - EMAIL (remetente)
+# - BREVO_API_KEY
+# - DESTINATARIOS_GERAL (lista separada por vírgula/;/\n)
+# - DESTINATARIOS_CLIENTES (lista separada por vírgula/;/\n)
+# fallback: DESTINATARIOS (se uma das duas acima não estiver definida)
+# - PLANILHA e PLANILHA_CLIENTES
 
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
 
@@ -881,6 +871,13 @@ def _gs_tab_url(sheet_id: str, gid: str | None) -> str:
     return f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit#gid={gid}"
 
 
+def _pick_recipients(env_primary: str, env_fallback: str = "DESTINATARIOS") -> list[str]:
+    raw = os.getenv(env_primary, "").strip()
+    if not raw:
+        raw = os.getenv(env_fallback, "").strip()
+    return _sanitize_emails(raw)
+
+
 def _unique_hrefs(*inserted_lists) -> int:
     hrefs: set[str] = set()
     for lst in inserted_lists:
@@ -898,129 +895,300 @@ def _unique_hrefs(*inserted_lists) -> int:
     return len(hrefs)
 
 
-def _build_html_email(
-    inserted_geral: list,
-    inserted_clientes: dict,
+def _badge(text: str) -> str:
+    t = html.escape(text or "")
+    if not t:
+        return ""
+    return (
+        f"<span style='display:inline-block; font-size:12px; padding:2px 8px; "
+        f"border-radius:999px; border:1px solid #e5e7eb; background:#f9fafb; "
+        f"color:#111; margin-left:8px;'>{t}</span>"
+    )
+
+
+def _truncate(s: str, n: int = 260) -> str:
+    s = (s or "").strip()
+    if len(s) <= n:
+        return s
+    return s[: n - 1].rstrip() + "…"
+
+
+def _build_html_email_geral(
+    inserted_geral: list[dict],
     planilha_id: str,
     planilha_gid: str | None,
-    planilha_clientes_id: str,
     titulo: str,
+    subtitulo: str,
 ) -> str:
-    """Constrói o HTML de um e-mail (regular ou extra — chamado separadamente para cada)."""
-    total_itens = _unique_hrefs(inserted_geral, inserted_clientes)
-    if total_itens == 0:
+    if not inserted_geral:
         return ""
 
-    n_geral = len(inserted_geral)
-    n_clientes = sum(len(v) for v in inserted_clientes.values())
-
+    total = len(inserted_geral)
     geral_url = _gs_tab_url(planilha_id, planilha_gid)
-    clientes_url = _gs_tab_url(planilha_clientes_id, None)
 
-    # Monta tabela de acionamentos: palavra-chave → destino(s)
-    kw_geral: dict[str, bool] = {}
-    kw_clientes: dict[str, set] = {}
+    # Contagens para sumário
+    kw_counts = Counter((it.get("keyword") or "").strip() for it in inserted_geral if (it.get("keyword") or "").strip())
+    sec_counts = Counter((it.get("secao") or "").strip() for it in inserted_geral if (it.get("secao") or "").strip())
 
+    top_kw = kw_counts.most_common(8)
+    top_sec = sec_counts.most_common(6)
+
+    # Agrupa por keyword
+    by_kw: dict[str, list[dict]] = {}
     for it in inserted_geral:
-        kw = (it.get("keyword", "") or "").strip()
-        if kw:
-            kw_geral[kw] = True
+        kw = (it.get("keyword") or "—").strip() or "—"
+        by_kw.setdefault(kw, []).append(it)
 
-    for cli, items in inserted_clientes.items():
-        for it in items:
-            kw = (it.get("keyword", "") or "").strip()
-            if kw:
-                kw_clientes.setdefault(kw, set()).add(cli)
+    blocks = []
+    for kw, items in sorted(by_kw.items(), key=lambda kv: len(kv[1]), reverse=True):
+        items_sorted = sorted(items, key=lambda x: (x.get("secao") or "", x.get("title") or ""))
+        li = []
+        for it in items_sorted[:25]:
+            title = html.escape(it.get("title") or "(sem título)")
+            href = html.escape(it.get("href") or "#")
+            sec = (it.get("secao") or "").strip()
+            abs_ = _truncate(it.get("abstract") or "", 260)
+            li.append(
+                "<li style='margin:0 0 10px 0;'>"
+                f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
+                f"{_badge(sec)}"
+                + (f"<div style='margin-top:4px; color:#374151; font-size:13px;'>{html.escape(abs_)}</div>" if abs_ else "")
+                "</li>"
+            )
+        more = ""
+        if len(items_sorted) > 25:
+            more = f"<div style='margin-top:6px; color:#6b7280; font-size:12px;'>+{len(items_sorted)-25} itens (ver planilha)</div>"
 
-    all_kws = sorted(set(list(kw_geral) + list(kw_clientes)), key=lambda x: x.lower())
+        blocks.append(
+            f"""
+            <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-top:12px;">
+              <div style="font-size:16px; margin-bottom:8px;">
+                <b>{html.escape(kw)}</b>
+                <span style="color:#6b7280; font-size:12px; margin-left:6px;">({len(items_sorted)})</span>
+              </div>
+              <ul style="margin:0; padding-left:18px;">
+                {''.join(li)}
+              </ul>
+              {more}
+            </div>
+            """
+        )
 
-    lines = []
-    for kw in all_kws:
-        in_g = kw_geral.get(kw, False)
-        clients = sorted(kw_clientes.get(kw, set()))
-        if in_g and clients:
-            destino = f"Geral + Cliente: {', '.join(clients)}"
-        elif in_g:
-            destino = "Geral"
-        else:
-            destino = f"Cliente: {', '.join(clients)}"
-        lines.append(f"<li><b>{html.escape(kw)}</b> → {html.escape(destino)}</li>")
+    # Tabelinha top KW / seções
+    top_kw_html = "".join(
+        f"<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;'>{html.escape(k)}</td>"
+        f"<td style='padding:6px 10px; border-top:1px solid #e5e7eb; text-align:right;'>{v}</td></tr>"
+        for k, v in top_kw
+    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>—</td></tr>"
 
-    acionamentos_html = (
-        "<ul style='margin:6px 0 0 18px'>" + "".join(lines) + "</ul>"
-        if lines else "<p style='margin:6px 0 0'>—</p>"
-    )
+    top_sec_html = "".join(
+        f"<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;'>{html.escape(k)}</td>"
+        f"<td style='padding:6px 10px; border-top:1px solid #e5e7eb; text-align:right;'>{v}</td></tr>"
+        for k, v in top_sec
+    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>—</td></tr>"
 
     return f"""
     <html>
       <body style="font-family: Arial, Helvetica, sans-serif; color:#111; line-height:1.35;">
-        <div style="max-width:820px;">
+        <div style="max-width:900px;">
           <h2 style="margin:0 0 6px 0;">{html.escape(titulo)}</h2>
-          <p style="margin:0 0 14px 0;"><b>{total_itens}</b> itens novos encontrados.</p>
+          <div style="margin:0 0 14px 0; color:#374151;">{html.escape(subtitulo)}</div>
 
-          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;">
-            <div>Entradas na planilha geral: <b>{n_geral}</b></div>
-            <div>Entradas por cliente: <b>{n_clientes}</b></div>
+          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:12px;">
+            <div style="font-size:14px;">Itens novos (geral): <b>{total}</b></div>
             <div style="margin-top:10px;">
               <a href="{html.escape(geral_url)}" target="_blank"
                  style="display:inline-block; padding:8px 10px; border:1px solid #111;
-                        border-radius:8px; text-decoration:none; margin-right:8px;">
-                 Planilha geral
-              </a>
-              <a href="{html.escape(clientes_url)}" target="_blank"
-                 style="display:inline-block; padding:8px 10px; border:1px solid #111;
-                        border-radius:8px; text-decoration:none;">
-                 Planilha por cliente
+                        border-radius:10px; text-decoration:none; color:#111;">
+                 Abrir planilha (geral)
               </a>
             </div>
           </div>
 
-          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px;">
-            <b>Acionamentos (palavra-chave → destino)</b>
-            {acionamentos_html}
+          <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+            <div style="flex:1; min-width:280px; padding:12px; border:1px solid #e5e7eb; border-radius:12px;">
+              <div style="font-weight:bold; margin-bottom:6px;">Top palavras-chave</div>
+              <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <tr><th style="text-align:left; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Keyword</th>
+                    <th style="text-align:right; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Qtd</th></tr>
+                {top_kw_html}
+              </table>
+            </div>
+
+            <div style="flex:1; min-width:280px; padding:12px; border:1px solid #e5e7eb; border-radius:12px;">
+              <div style="font-weight:bold; margin-bottom:6px;">Distribuição por seção</div>
+              <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <tr><th style="text-align:left; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Seção</th>
+                    <th style="text-align:right; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Qtd</th></tr>
+                {top_sec_html}
+              </table>
+            </div>
           </div>
+
+          <div style="margin-top:8px; color:#111; font-weight:bold;">Detalhamento (geral)</div>
+          {''.join(blocks)}
         </div>
       </body>
     </html>
     """
 
 
-def envia_email(
-    inserted_geral: list,
-    inserted_clientes: dict,
-    planilha_id: str,
-    planilha_gid: str | None,
+def _build_html_email_clientes(
+    inserted_clientes: dict[str, list[dict]],
     planilha_clientes_id: str,
-    subject: str,
-    titulo_html: str,
-) -> None:
-    """Envia um único e-mail. Chamado separadamente para regular e extra."""
+    titulo: str,
+    subtitulo: str,
+) -> str:
+    if not inserted_clientes or all(not v for v in inserted_clientes.values()):
+        return ""
+
+    total = sum(len(v) for v in inserted_clientes.values())
+    clientes_url = _gs_tab_url(planilha_clientes_id, None)
+
+    # Sumário por cliente
+    sum_rows = []
+    for cliente, items in inserted_clientes.items():
+        if not items:
+            continue
+        kw_counts = Counter()
+        sec_counts = Counter()
+        for it in items:
+            # aqui "keyword" é a string de kws_join (ex: "sus; anvisa; ...")
+            kws_join = (it.get("keyword") or "").strip()
+            if kws_join:
+                for part in [p.strip() for p in kws_join.split(";") if p.strip()]:
+                    kw_counts[part] += 1
+            sec = (it.get("secao") or "").strip()
+            if sec:
+                sec_counts[sec] += 1
+        top_kws = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3)) or "—"
+        top_secs = ", ".join(f"{k} ({n})" for k, n in sec_counts.most_common(3)) or "—"
+        sum_rows.append((cliente, len(items), top_kws, top_secs))
+    sum_rows.sort(key=lambda t: t[1], reverse=True)
+
+    def _slug(s: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "-", _normalize_ws(s)).strip("-") or "cliente"
+
+    # HTML do sumário
+    sum_html = []
+    sum_html.append(
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<tr>"
+        "<th style='text-align:left; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Cliente</th>"
+        "<th style='text-align:right; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Qtd</th>"
+        "<th style='text-align:left; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Top keywords</th>"
+        "<th style='text-align:left; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Top seções</th>"
+        "</tr>"
+    )
+    for cliente, qtd, top_kws, top_secs in sum_rows:
+        anchor = _slug(cliente)
+        sum_html.append(
+            "<tr>"
+            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'><a href='#{anchor}' style='color:#111; text-decoration:none;'><b>{html.escape(cliente)}</b></a></td>"
+            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb; text-align:right;'><b>{qtd}</b></td>"
+            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_kws)}</td>"
+            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_secs)}</td>"
+            "</tr>"
+        )
+    sum_html.append("</table>")
+
+    # Detalhamento por cliente: agrupa por "keyword join" e lista itens
+    details = []
+    for cliente, items in sorted(inserted_clientes.items(), key=lambda kv: len(kv[1]), reverse=True):
+        if not items:
+            continue
+        anchor = _slug(cliente)
+
+        # agrupa por kws_join (string inteira) só pra ficar legível
+        grouped: dict[str, list[dict]] = {}
+        for it in items:
+            k = (it.get("keyword") or "").strip() or "—"
+            grouped.setdefault(k, []).append(it)
+
+        blocks = []
+        for kws_join, its in sorted(grouped.items(), key=lambda kv: len(kv[1]), reverse=True):
+            its_sorted = sorted(its, key=lambda x: ((x.get("secao") or ""), (x.get("title") or "")))
+            li = []
+            for it in its_sorted[:30]:
+                title = html.escape(it.get("title") or "(sem título)")
+                href = html.escape(it.get("href") or "#")
+                sec = (it.get("secao") or "").strip()
+                abs_ = _truncate(it.get("abstract") or "", 280)
+                li.append(
+                    "<li style='margin:0 0 10px 0;'>"
+                    f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
+                    f"{_badge(sec)}"
+                    + (f"<div style='margin-top:4px; color:#374151; font-size:13px;'>{html.escape(abs_)}</div>" if abs_ else "")
+                    "</li>"
+                )
+            more = ""
+            if len(its_sorted) > 30:
+                more = f"<div style='margin-top:6px; color:#6b7280; font-size:12px;'>+{len(its_sorted)-30} itens (ver planilha)</div>"
+
+            blocks.append(
+                f"""
+                <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-top:10px;">
+                  <div style="font-size:13px; color:#111; margin-bottom:8px;">
+                    <b>Keywords acionadas:</b> <span style="color:#374151;">{html.escape(kws_join)}</span>
+                    <span style="color:#6b7280; font-size:12px; margin-left:8px;">({len(its_sorted)})</span>
+                  </div>
+                  <ul style="margin:0; padding-left:18px;">
+                    {''.join(li)}
+                  </ul>
+                  {more}
+                </div>
+                """
+            )
+
+        details.append(
+            f"""
+            <div style="padding:14px; border:1px solid #e5e7eb; border-radius:14px; margin-top:14px; background:#fff;">
+              <div id="{anchor}" style="font-size:18px; margin-bottom:6px;"><b>{html.escape(cliente)}</b></div>
+              <div style="color:#6b7280; font-size:13px; margin-bottom:10px;">Itens novos: <b>{len(items)}</b></div>
+              {''.join(blocks)}
+            </div>
+            """
+        )
+
+    return f"""
+    <html>
+      <body style="font-family: Arial, Helvetica, sans-serif; color:#111; line-height:1.35;">
+        <div style="max-width:920px;">
+          <h2 style="margin:0 0 6px 0;">{html.escape(titulo)}</h2>
+          <div style="margin:0 0 14px 0; color:#374151;">{html.escape(subtitulo)}</div>
+
+          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:12px;">
+            <div style="font-size:14px;">Itens novos (clientes): <b>{total}</b></div>
+            <div style="margin-top:10px;">
+              <a href="{html.escape(clientes_url)}" target="_blank"
+                 style="display:inline-block; padding:8px 10px; border:1px solid #111;
+                        border-radius:10px; text-decoration:none; color:#111;">
+                 Abrir planilha (clientes)
+              </a>
+            </div>
+          </div>
+
+          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:12px;">
+            <div style="font-weight:bold; margin-bottom:8px;">Sumário por cliente</div>
+            {''.join(sum_html)}
+          </div>
+
+          <div style="margin-top:8px; color:#111; font-weight:bold;">Detalhamento (por cliente)</div>
+          {''.join(details)}
+        </div>
+      </body>
+    </html>
+    """
+
+
+def _send_email(subject: str, html_body: str, recipients: list[str]) -> None:
     api = _brevo_client()
     sender_email = os.getenv("EMAIL")
-    raw_dest = os.getenv("DESTINATARIOS", "")
-    if not (api and sender_email and raw_dest):
-        print("Dados de e-mail incompletos; pulando envio.")
+    if not (api and sender_email and recipients and html_body):
+        print("Dados de e-mail incompletos ou HTML vazio; pulando envio.")
         return
 
-    total = _unique_hrefs(inserted_geral, inserted_clientes)
-    if total == 0:
-        print("Nada novo — e-mail não será enviado.")
-        return
-
-    html_body = _build_html_email(
-        inserted_geral=inserted_geral,
-        inserted_clientes=inserted_clientes,
-        planilha_id=planilha_id,
-        planilha_gid=planilha_gid,
-        planilha_clientes_id=planilha_clientes_id,
-        titulo=titulo_html,
-    )
-    if not html_body:
-        print("HTML vazio — pulando envio.")
-        return
-
-    destinatarios = _sanitize_emails(raw_dest)
-    for dest in destinatarios:
+    for dest in recipients:
         try:
             api.send_transac_email(SendSmtpEmail(
                 to=[{"email": dest}],
@@ -1033,12 +1201,52 @@ def envia_email(
             print(f"❌ Falha ao enviar para {dest}: {e}")
 
 
+def envia_emails_edicao(
+    edicao_label: str,            # "Regular" | "Extra"
+    subtitulo: str,               # ex: "Edição Regular — 02/03/2026"
+    inserted_geral: list[dict],
+    inserted_clientes: dict[str, list[dict]],
+    planilha_id: str,
+    planilha_gid: str | None,
+    planilha_clientes_id: str,
+    subject_prefix: str,          # ex: "DOU Regular — 02-03-2026"
+) -> None:
+    # 1) E-mail GERAL (só itens gerais)
+    rec_geral = _pick_recipients("DESTINATARIOS_GERAL")
+    if inserted_geral:
+        html_geral = _build_html_email_geral(
+            inserted_geral=inserted_geral,
+            planilha_id=planilha_id,
+            planilha_gid=planilha_gid,
+            titulo=f"📋 DOU — {edicao_label} — Geral",
+            subtitulo=subtitulo,
+        )
+        subj_geral = f"{subject_prefix} | Geral: {len(inserted_geral)}"
+        _send_email(subj_geral, html_geral, rec_geral)
+    else:
+        print("Nada novo (geral) — não envia e-mail geral.")
+
+    # 2) E-mail CLIENTES (sumário por cliente + itens com link+resumo)
+    rec_cli = _pick_recipients("DESTINATARIOS_CLIENTES")
+    if inserted_clientes and any(inserted_clientes.values()):
+        html_cli = _build_html_email_clientes(
+            inserted_clientes=inserted_clientes,
+            planilha_clientes_id=planilha_clientes_id,
+            titulo=f"🧩 DOU — {edicao_label} — Clientes",
+            subtitulo=subtitulo,
+        )
+        total_cli = sum(len(v) for v in inserted_clientes.values())
+        subj_cli = f"{subject_prefix} | Clientes: {total_cli}"
+        _send_email(subj_cli, html_cli, rec_cli)
+    else:
+        print("Nada novo (clientes) — não envia e-mail de clientes.")
+
+
 # ---------------------------------------------------------------------------
 # Entrypoints
 # ---------------------------------------------------------------------------
 
 def executar_regular():
-    """Raspa e processa a edição regular do DOU. Envia um e-mail próprio."""
     conteudo = raspa_dou()
 
     geral = procura_termos(conteudo)
@@ -1048,20 +1256,19 @@ def executar_regular():
     _qtd_c, ins_c, _sh_c, _gids = salva_por_cliente(por_cliente)
 
     hoje = datetime.now().strftime("%d-%m-%Y")
-    total = _unique_hrefs(ins_g, ins_c)
-    envia_email(
+    envia_emails_edicao(
+        edicao_label="Edição Regular",
+        subtitulo=f"Edição Regular — {hoje}",
         inserted_geral=ins_g,
         inserted_clientes=ins_c,
         planilha_id=os.getenv("PLANILHA", ""),
         planilha_gid=_ws_gid(ws_geral) if ws_geral else None,
         planilha_clientes_id=os.getenv("PLANILHA_CLIENTES", ""),
-        subject=f"DOU Regular — {hoje} | {total} itens novos",
-        titulo_html="📋 DOU — Edição Regular",
+        subject_prefix=f"DOU Regular — {hoje}",
     )
 
 
 def executar_extra():
-    """Raspa e processa a edição extra do DOU. Envia um e-mail próprio."""
     conteudo = raspa_dou_extra()
 
     geral = procura_termos(conteudo)
@@ -1072,20 +1279,19 @@ def executar_extra():
 
     hoje = datetime.now().strftime("%d-%m-%Y")
     hora = datetime.now().strftime("%H:%M")
-    total = _unique_hrefs(ins_g, ins_c)
-    envia_email(
+    envia_emails_edicao(
+        edicao_label="Edição Extra",
+        subtitulo=f"Edição Extra — {hoje} {hora}",
         inserted_geral=ins_g,
         inserted_clientes=ins_c,
         planilha_id=os.getenv("PLANILHA", ""),
         planilha_gid=_ws_gid(ws_geral) if ws_geral else None,
         planilha_clientes_id=os.getenv("PLANILHA_CLIENTES", ""),
-        subject=f"DOU Extra — {hoje} {hora} | {total} itens novos",
-        titulo_html="⚡ DOU — Edição Extra",
+        subject_prefix=f"DOU Extra — {hoje} {hora}",
     )
 
 
 def executar_tudo():
-    """Raspa edição regular + extra, enviando um e-mail para cada."""
     executar_regular()
     executar_extra()
 
