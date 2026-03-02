@@ -5,6 +5,6 @@ Raspagem do Diário Oficial da União (DOU) e atualização em Google Sheets, in
 ## Arquivos principais
 - `raspagemdou.py`: rotina principal de raspagem do DOU
 - `dou_extra.py`: lógica de edições extras (captura/atualização)
-- `alinhamento_dou.py`: rotinas auxiliares (ex.: classificação/alinhamento, se você usa)
+- `alinhamento_dou.py`: rotinas auxiliares (ex.: classificação/alinhamento)
 - `.github/workflows/main.yml`: execução automatizada via GitHub Actions
 - `requirements.txt`: dependências Python
