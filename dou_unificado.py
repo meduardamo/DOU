@@ -822,16 +822,8 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
 
 
 # ---------------------------------------------------------------------------
-# E-mail (AGORA: 2 e-mails por edição -> Geral + Clientes)
+# E-mail (2 e-mails por edição -> Geral + Clientes)
 # ---------------------------------------------------------------------------
-
-# Variáveis esperadas:
-# - EMAIL (remetente)
-# - BREVO_API_KEY
-# - DESTINATARIOS_GERAL (lista separada por vírgula/;/\n)
-# - DESTINATARIOS_CLIENTES (lista separada por vírgula/;/\n)
-# fallback: DESTINATARIOS (se uma das duas acima não estiver definida)
-# - PLANILHA e PLANILHA_CLIENTES
 
 EMAIL_RE = re.compile(r'<?("?)([^"\s<>@]+@[^"\s<>@]+\.[^"\s<>@]+)\1>?$')
 
@@ -926,14 +918,12 @@ def _build_html_email_geral(
     total = len(inserted_geral)
     geral_url = _gs_tab_url(planilha_id, planilha_gid)
 
-    # Contagens para sumário
     kw_counts = Counter((it.get("keyword") or "").strip() for it in inserted_geral if (it.get("keyword") or "").strip())
     sec_counts = Counter((it.get("secao") or "").strip() for it in inserted_geral if (it.get("secao") or "").strip())
 
     top_kw = kw_counts.most_common(8)
     top_sec = sec_counts.most_common(6)
 
-    # Agrupa por keyword
     by_kw: dict[str, list[dict]] = {}
     for it in inserted_geral:
         kw = (it.get("keyword") or "—").strip() or "—"
@@ -950,10 +940,10 @@ def _build_html_email_geral(
             abs_ = _truncate(it.get("abstract") or "", 260)
             li.append(
                 "<li style='margin:0 0 10px 0;'>"
-                f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
-                f"{_badge(sec)}"
+                + f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
+                + f"{_badge(sec)}"
                 + (f"<div style='margin-top:4px; color:#374151; font-size:13px;'>{html.escape(abs_)}</div>" if abs_ else "")
-                "</li>"
+                + "</li>"
             )
         more = ""
         if len(items_sorted) > 25:
@@ -974,7 +964,6 @@ def _build_html_email_geral(
             """
         )
 
-    # Tabelinha top KW / seções
     top_kw_html = "".join(
         f"<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;'>{html.escape(k)}</td>"
         f"<td style='padding:6px 10px; border-top:1px solid #e5e7eb; text-align:right;'>{v}</td></tr>"
@@ -1045,7 +1034,6 @@ def _build_html_email_clientes(
     total = sum(len(v) for v in inserted_clientes.values())
     clientes_url = _gs_tab_url(planilha_clientes_id, None)
 
-    # Sumário por cliente
     sum_rows = []
     for cliente, items in inserted_clientes.items():
         if not items:
@@ -1053,7 +1041,6 @@ def _build_html_email_clientes(
         kw_counts = Counter()
         sec_counts = Counter()
         for it in items:
-            # aqui "keyword" é a string de kws_join (ex: "sus; anvisa; ...")
             kws_join = (it.get("keyword") or "").strip()
             if kws_join:
                 for part in [p.strip() for p in kws_join.split(";") if p.strip()]:
@@ -1069,7 +1056,6 @@ def _build_html_email_clientes(
     def _slug(s: str) -> str:
         return re.sub(r"[^a-z0-9]+", "-", _normalize_ws(s)).strip("-") or "cliente"
 
-    # HTML do sumário
     sum_html = []
     sum_html.append(
         "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
@@ -1084,22 +1070,20 @@ def _build_html_email_clientes(
         anchor = _slug(cliente)
         sum_html.append(
             "<tr>"
-            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'><a href='#{anchor}' style='color:#111; text-decoration:none;'><b>{html.escape(cliente)}</b></a></td>"
-            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb; text-align:right;'><b>{qtd}</b></td>"
-            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_kws)}</td>"
-            f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_secs)}</td>"
-            "</tr>"
+            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'><a href='#{anchor}' style='color:#111; text-decoration:none;'><b>{html.escape(cliente)}</b></a></td>"
+            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb; text-align:right;'><b>{qtd}</b></td>"
+            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_kws)}</td>"
+            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_secs)}</td>"
+            + "</tr>"
         )
     sum_html.append("</table>")
 
-    # Detalhamento por cliente: agrupa por "keyword join" e lista itens
     details = []
     for cliente, items in sorted(inserted_clientes.items(), key=lambda kv: len(kv[1]), reverse=True):
         if not items:
             continue
         anchor = _slug(cliente)
 
-        # agrupa por kws_join (string inteira) só pra ficar legível
         grouped: dict[str, list[dict]] = {}
         for it in items:
             k = (it.get("keyword") or "").strip() or "—"
@@ -1116,10 +1100,10 @@ def _build_html_email_clientes(
                 abs_ = _truncate(it.get("abstract") or "", 280)
                 li.append(
                     "<li style='margin:0 0 10px 0;'>"
-                    f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
-                    f"{_badge(sec)}"
+                    + f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
+                    + f"{_badge(sec)}"
                     + (f"<div style='margin-top:4px; color:#374151; font-size:13px;'>{html.escape(abs_)}</div>" if abs_ else "")
-                    "</li>"
+                    + "</li>"
                 )
             more = ""
             if len(its_sorted) > 30:
@@ -1202,16 +1186,15 @@ def _send_email(subject: str, html_body: str, recipients: list[str]) -> None:
 
 
 def envia_emails_edicao(
-    edicao_label: str,            # "Regular" | "Extra"
-    subtitulo: str,               # ex: "Edição Regular — 02/03/2026"
+    edicao_label: str,
+    subtitulo: str,
     inserted_geral: list[dict],
     inserted_clientes: dict[str, list[dict]],
     planilha_id: str,
     planilha_gid: str | None,
     planilha_clientes_id: str,
-    subject_prefix: str,          # ex: "DOU Regular — 02-03-2026"
+    subject_prefix: str,
 ) -> None:
-    # 1) E-mail GERAL (só itens gerais)
     rec_geral = _pick_recipients("DESTINATARIOS_GERAL")
     if inserted_geral:
         html_geral = _build_html_email_geral(
@@ -1226,7 +1209,6 @@ def envia_emails_edicao(
     else:
         print("Nada novo (geral) — não envia e-mail geral.")
 
-    # 2) E-mail CLIENTES (sumário por cliente + itens com link+resumo)
     rec_cli = _pick_recipients("DESTINATARIOS_CLIENTES")
     if inserted_clientes and any(inserted_clientes.values()):
         html_cli = _build_html_email_clientes(
