@@ -1216,7 +1216,7 @@ def envia_emails_edicao(
             inserted_geral=inserted_geral,
             planilha_id=planilha_id,
             planilha_gid=planilha_gid,
-            titulo=f"📋 DOU — {edicao_label} — Geral",
+            titulo=f"DOU — {edicao_label} — Geral",
             subtitulo=subtitulo,
         )
         subj_geral = f"{subject_prefix} | Geral: {len(inserted_geral)}"
@@ -1229,7 +1229,7 @@ def envia_emails_edicao(
         html_cli = _build_html_email_clientes(
             inserted_clientes=inserted_clientes,
             planilha_clientes_id=planilha_clientes_id,
-            titulo=f"🧩 DOU — {edicao_label} — Clientes",
+            titulo=f"DOU — {edicao_label} — Clientes",
             subtitulo=subtitulo,
         )
         total_cli = sum(len(v) for v in inserted_clientes.values())
