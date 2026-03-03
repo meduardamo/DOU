@@ -217,7 +217,7 @@ _BEBIDAS_EXCLUDE_TERMS = [
     "concede o registro",
     "drf", "srrf", "defis", "efi2vit", "regesp",
     "delegacia da receita federal",
-    "cnpj", "ncm", "mapa",
+    "cnpj", "ncm",
     "engarrafador",
     "marcas comerciais",
     "atualiza as marcas",
