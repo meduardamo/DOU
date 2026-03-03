@@ -3,6 +3,7 @@ import os
 import re
 import json
 import html
+import time
 import unicodedata
 import requests
 import gspread
@@ -653,7 +654,15 @@ COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo"
 
 
 def _ensure_header(ws, header: list[str]) -> None:
-    current = ws.row_values(1)
+    for attempt in range(3):
+        try:
+            current = ws.row_values(1)
+            break
+        except gspread.exceptions.APIError as e:
+            if "429" in str(e) and attempt < 2:
+                time.sleep(15 * (attempt + 1))
+            else:
+                raise
     if current == header:
         return
     ws.resize(rows=max(2, ws.row_count), cols=len(header))
@@ -817,6 +826,7 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
         if n > 0:
             total_new += n
             inserted_map[cli] = items
+        time.sleep(2)  # evita rate limit da Sheets API (429)
 
     return total_new, inserted_map, sh, gids
 
@@ -1201,7 +1211,7 @@ def envia_emails_edicao(
             inserted_geral=inserted_geral,
             planilha_id=planilha_id,
             planilha_gid=planilha_gid,
-            titulo=f"DOU — {edicao_label} — Geral",
+            titulo=f"📋 DOU — {edicao_label} — Geral",
             subtitulo=subtitulo,
         )
         subj_geral = f"{subject_prefix} | Geral: {len(inserted_geral)}"
@@ -1214,7 +1224,7 @@ def envia_emails_edicao(
         html_cli = _build_html_email_clientes(
             inserted_clientes=inserted_clientes,
             planilha_clientes_id=planilha_clientes_id,
-            titulo=f"DOU — {edicao_label} — Clientes",
+            titulo=f"🧩 DOU — {edicao_label} — Clientes",
             subtitulo=subtitulo,
         )
         total_cli = sum(len(v) for v in inserted_clientes.values())
