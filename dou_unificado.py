@@ -182,6 +182,28 @@ _PROF_RH_PATTERNS = [
     re.compile(r"\bprofessor\s+(substituto|tempor[aá]rio|visitante)\b", re.I),
 ]
 
+# novo bloqueio: aposentadoria/pensão/vacância/exoneração a pedido
+_APOSENT_PATTERNS = [
+    # aposentadoria — qualquer menção já é suficientemente específica
+    re.compile(r"\baposenta[cç][aã]o\b", re.I),
+    re.compile(r"\baposentadori[ao]\b", re.I),
+    re.compile(r"\baposentad[oa]\b", re.I),
+
+    # pensão — só bloqueia quando é claramente ato de pessoal
+    re.compile(r"\bpens[aã]o\s+por\s+morte\b", re.I),
+    re.compile(r"\bpens[aã]o\s+vitalícia\b", re.I),
+    re.compile(r"\bpens[aã]o\s+vitalicia\b", re.I),
+    re.compile(r"\binstitu[ií].*\bpens[aã]o\b", re.I),
+    re.compile(r"\bconcede.*\bpens[aã]o\b", re.I),
+
+    # vacância — só bloqueia quando ligada explicitamente a cargo/emprego
+    re.compile(r"\bvac[aâ]ncia\s+do\s+cargo\b", re.I),
+    re.compile(r"\bdeclara\s+vac[aâ]ncia\b", re.I),
+
+    # exoneração a pedido — específico o suficiente
+    re.compile(r"\bexonera[cç][aã]o\s+a\s+pedido\b", re.I),
+]
+
 _ATO_EMPRESA_EXCLUDE_TERMS = [
     "ato declaratorio executivo",
     "registro especial",
@@ -245,16 +267,26 @@ def _is_blocked(text: str) -> bool:
     if not text:
         return False
     nt = _normalize_ws(text)
+
     for pat in EXCLUDE_PATTERNS:
         if pat and pat.search(nt):
             return True
+
+    # aplica o novo bloqueio aqui
+    for pat in _APOSENT_PATTERNS:
+        if pat and pat.search(nt):
+            return True
+
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
+
     if _DECISAO_CASE_REGEX.search(nt):
         return True
+
     for pat in _PROF_RH_PATTERNS:
         if pat.search(nt):
             return True
+
     return False
 
 
