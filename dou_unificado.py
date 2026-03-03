@@ -659,27 +659,25 @@ COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo"
 COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
 
 
-def _ensure_header(ws, header: list[str]) -> None:
-    for attempt in range(3):
-        try:
-            current = ws.row_values(1)
-            break
-        except gspread.exceptions.APIError as e:
-            if "429" in str(e) and attempt < 2:
-                time.sleep(15 * (attempt + 1))
-            else:
-                raise
-    if current == header:
-        return
-    ws.resize(rows=max(2, ws.row_count), cols=len(header))
-    ws.update("1:1", [header])
-
-
 def _ws_gid(ws) -> str:
     try:
         return str(ws.id)
     except Exception:
         return ""
+
+
+def _fix_header(ws, all_vals: list[list], header: list[str]) -> None:
+    """Corrige cabeçalho usando dados já lidos em memória — zero chamadas extras à API."""
+    current = all_vals[0] if all_vals else []
+    if current == header:
+        return
+    ws.resize(rows=max(2, ws.row_count), cols=len(header))
+    ws.update("1:1", [header])
+    # atualiza all_vals in-place para refletir o novo header
+    if all_vals:
+        all_vals[0] = header
+    else:
+        all_vals.insert(0, header)
 
 
 def salva_na_base(palavras_raspadas: dict | None) -> tuple[int, list, object | None, object | None]:
@@ -698,20 +696,20 @@ def salva_na_base(palavras_raspadas: dict | None) -> tuple[int, list, object | N
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title="Página1", rows="2000", cols=str(len(COLS_GERAL)))
 
-    _ensure_header(ws, COLS_GERAL)
+    # 1 leitura única — header + dados juntos
+    all_vals = ws.get_all_values()
+    _fix_header(ws, all_vals, COLS_GERAL)
 
     link_idx = COLS_GERAL.index("Link")
     palavra_idx = COLS_GERAL.index("Palavra-chave")
 
-    all_vals = ws.get_all_values()
     existing: set[tuple] = set()
-    if len(all_vals) > 1:
-        for row in all_vals[1:]:
-            if len(row) > link_idx:
-                existing.add((
-                    row[link_idx].strip(),
-                    row[palavra_idx].strip() if len(row) > palavra_idx else "",
-                ))
+    for row in all_vals[1:]:
+        if len(row) > link_idx:
+            existing.add((
+                row[link_idx].strip(),
+                row[palavra_idx].strip() if len(row) > palavra_idx else "",
+            ))
 
     rows_to_insert = []
     inserted_items = []
@@ -750,62 +748,6 @@ def salva_na_base(palavras_raspadas: dict | None) -> tuple[int, list, object | N
     return len(rows_to_insert), inserted_items, sh, ws
 
 
-def _append_dedupe_por_cliente(sh, sheet_name: str, rows: list[list]) -> tuple[int, list]:
-    if not rows:
-        return 0, []
-
-    try:
-        ws = sh.worksheet(sheet_name)
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=sheet_name, rows=str(max(100, len(rows) + 10)), cols=len(COLS_CLIENTE))
-
-    _ensure_header(ws, COLS_CLIENTE)
-
-    link_idx = COLS_CLIENTE.index("Link")
-    kw_idx = COLS_CLIENTE.index("Palavra-chave")
-    cli_idx = COLS_CLIENTE.index("Cliente")
-
-    all_vals = ws.get_all_values()
-    existing: set[tuple] = set()
-    if len(all_vals) > 1:
-        for row in all_vals[1:]:
-            if len(row) > link_idx:
-                existing.add((
-                    row[link_idx].strip(),
-                    row[kw_idx].strip() if len(row) > kw_idx else "",
-                    row[cli_idx].strip() if len(row) > cli_idx else "",
-                ))
-
-    new_rows = []
-    inserted_items = []
-    for r in rows:
-        if len(r) <= link_idx:
-            continue
-        href = (r[link_idx] or "").strip()
-        kw = (r[kw_idx] or "").strip()
-        cli = (r[cli_idx] or "").strip()
-        key = (href, kw, cli)
-        if not href or key in existing:
-            continue
-        new_rows.append(r)
-        inserted_items.append({
-            "date": r[0],
-            "cliente": cli,
-            "keyword": kw,
-            "title": r[3],
-            "href": href,
-            "abstract": r[5],
-            "secao": r[-1] if len(r) else "",
-        })
-        existing.add(key)
-
-    if not new_rows:
-        return 0, []
-
-    ws.insert_rows(new_rows, row=2, value_input_option="USER_ENTERED")
-    return len(new_rows), inserted_items
-
-
 def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict]:
     plan_id = os.getenv("PLANILHA_CLIENTES")
     if not plan_id:
@@ -815,24 +757,81 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
     gc = _gs_client_from_env()
     sh = gc.open_by_key(plan_id)
 
-    gids: dict[str, str] = {}
+    link_idx = COLS_CLIENTE.index("Link")
+    kw_idx   = COLS_CLIENTE.index("Palavra-chave")
+    cli_idx  = COLS_CLIENTE.index("Cliente")
+
+    # -----------------------------------------------------------------------
+    # FASE 1 — garantir abas e ler TUDO de uma vez (1 leitura por cliente)
+    # -----------------------------------------------------------------------
+    ws_map:  dict[str, object]      = {}  # cli -> worksheet
+    gids:    dict[str, str]         = {}
+    cache:   dict[str, list[list]]  = {}  # cli -> all_vals já lidos
+
     for cli in CLIENT_KEYWORDS:
         try:
             ws = sh.worksheet(cli)
         except gspread.WorksheetNotFound:
             ws = sh.add_worksheet(title=cli, rows="2", cols=len(COLS_CLIENTE))
-        _ensure_header(ws, COLS_CLIENTE)
-        gids[cli] = _ws_gid(ws)
 
-    total_new = 0
+        all_vals = ws.get_all_values()          # única leitura por cliente
+        _fix_header(ws, all_vals, COLS_CLIENTE) # corrige header em memória + API se necessário
+
+        ws_map[cli] = ws
+        gids[cli]   = _ws_gid(ws)
+        cache[cli]  = all_vals
+
+    # -----------------------------------------------------------------------
+    # FASE 2 — deduplicar em memória e escrever (só escritas, zero leituras)
+    # -----------------------------------------------------------------------
+    total_new    = 0
     inserted_map: dict[str, list] = {}
 
     for cli, rows in (por_cliente or {}).items():
-        n, items = _append_dedupe_por_cliente(sh, cli, rows)
-        if n > 0:
-            total_new += n
-            inserted_map[cli] = items
-        time.sleep(2)  # evita rate limit da Sheets API (429)
+        if not rows:
+            continue
+
+        all_vals = cache.get(cli, [])
+        existing: set[tuple] = set()
+        for row in all_vals[1:]:
+            if len(row) > link_idx:
+                existing.add((
+                    row[link_idx].strip(),
+                    row[kw_idx].strip()  if len(row) > kw_idx  else "",
+                    row[cli_idx].strip() if len(row) > cli_idx else "",
+                ))
+
+        new_rows:       list[list] = []
+        inserted_items: list[dict] = []
+
+        for r in rows:
+            if len(r) <= link_idx:
+                continue
+            href = (r[link_idx] or "").strip()
+            kw   = (r[kw_idx]   or "").strip()
+            cli_ = (r[cli_idx]  or "").strip()
+            key  = (href, kw, cli_)
+            if not href or key in existing:
+                continue
+            new_rows.append(r)
+            inserted_items.append({
+                "date":     r[0],
+                "cliente":  cli_,
+                "keyword":  kw,
+                "title":    r[3],
+                "href":     href,
+                "abstract": r[5],
+                "secao":    r[-1] if r else "",
+            })
+            existing.add(key)
+
+        if new_rows:
+            ws_map[cli].insert_rows(new_rows, row=2, value_input_option="USER_ENTERED")
+            print(f"[{cli}] +{len(new_rows)} linhas.")
+            total_new += len(new_rows)
+            inserted_map[cli] = inserted_items
+        else:
+            print(f"[{cli}] nada novo.")
 
     return total_new, inserted_map, sh, gids
 
