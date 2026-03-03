@@ -354,34 +354,40 @@ def _raspa_secoes(data: str, secoes: list[str], campo_secao: str = "secao") -> d
     combined: dict[str, list] = {"jsonArray": []}
 
     for sec in secoes:
-        try:
-            url = f"https://www.in.gov.br/leiturajornal?data={data}&secao={sec}"
-            page = requests.get(url, timeout=40, headers=_HDR, allow_redirects=True)
-            page.raise_for_status()
-            soup = BeautifulSoup(page.text, "html.parser")
+        for attempt in range(3):
+            try:
+                url = f"https://www.in.gov.br/leiturajornal?data={data}&secao={sec}"
+                page = requests.get(url, timeout=60, headers=_HDR, allow_redirects=True)
+                page.raise_for_status()
+                soup = BeautifulSoup(page.text, "html.parser")
 
-            params = soup.find("script", {"id": "params"})
-            raw_json = params.text.strip() if (params and params.text) else None
+                params = soup.find("script", {"id": "params"})
+                raw_json = params.text.strip() if (params and params.text) else None
 
-            if not raw_json:
-                m = re.search(r'(\{"jsonArray"\s*:\s*\[.*?\]\s*\})', page.text, flags=re.S)
-                raw_json = m.group(1).strip() if m else None
+                if not raw_json:
+                    m = re.search(r'(\{"jsonArray"\s*:\s*\[.*?\]\s*\})', page.text, flags=re.S)
+                    raw_json = m.group(1).strip() if m else None
 
-            if not raw_json:
-                print(f"[{sec}] payload não encontrado. status={page.status_code}")
-                continue
+                if not raw_json:
+                    print(f"[{sec}] payload não encontrado. status={page.status_code}")
+                    break
 
-            j = json.loads(raw_json)
-            arr = j.get("jsonArray", []) or []
-            for it in arr:
-                if isinstance(it, dict):
-                    it[campo_secao] = sec
-            combined["jsonArray"].extend(arr)
-            print(f"[{sec}] itens: {len(arr)}")
+                j = json.loads(raw_json)
+                arr = j.get("jsonArray", []) or []
+                for it in arr:
+                    if isinstance(it, dict):
+                        it[campo_secao] = sec
+                combined["jsonArray"].extend(arr)
+                print(f"[{sec}] itens: {len(arr)}")
+                break  # sucesso
 
-        except Exception as e:
-            print(f"Erro ao raspar seção {sec}: {e}")
-            continue
+            except Exception as e:
+                if attempt < 2:
+                    wait = 15 * (attempt + 1)
+                    print(f"[{sec}] tentativa {attempt + 1} falhou: {e}. Aguardando {wait}s...")
+                    time.sleep(wait)
+                else:
+                    print(f"[{sec}] falhou após 3 tentativas: {e}")
 
     if combined["jsonArray"]:
         print(f"Total coletado: {len(combined['jsonArray'])} itens")
