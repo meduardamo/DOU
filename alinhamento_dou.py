@@ -33,7 +33,6 @@ COLS_CANONICAL = [
 BATCH_SIZE = int(os.getenv("ALIGN_BATCH", "25"))
 SLEEP_SEC  = float(os.getenv("ALIGN_SLEEP", "0.10"))
 
-# MAPA: ABA -> (NOME, DESCRIÇÃO)
 CLIENTE_DESCRICOES = {
     "IU": ("Instituto Unibanco (IU)",
            "O Instituto Unibanco (IU) é uma organização sem fins lucrativos que atua no fortalecimento da gestão educacional, desenvolvendo projetos como o Jovem de Futuro, oferecendo apoio técnico a secretarias estaduais de educação e produzindo conhecimento para aprimorar políticas públicas. Seu foco está tanto no cenário federal, acompanhando os debates sobre o financiamento da educação, programas nacionais de educação, regulação educacional e diretrizes definidas por órgãos como o Conselho Nacional de Educação, quanto subnacional, olhando para 6 estados prioritários (RS, MG, ES, CE, PI e GO). O IU apoia iniciativas de recomposição de aprendizagens, infraestrutura escolar, inclusão digital, educação ambiental, mudanças do clima e valorização de profissionais da educação."),
@@ -73,9 +72,10 @@ CLIENTE_DESCRICOES = {
 
 CLIENTE_DESCRICOES.setdefault("Reuna", CLIENTE_DESCRICOES["Reúna"])
 
-# PROMPT
-PROMPT = Template(r"""
-Você é analista de políticas públicas e faz triagem de atos do DOU e matérias legislativas para um(a) cliente.
+# ── PROMPT ────────────────────────────────────────────────────────────────────
+
+PROMPT = Template(
+"""Você é analista de políticas públicas e faz triagem de atos do DOU e matérias legislativas para um(a) cliente.
 
 Missão/escopo do cliente:
 $descricao
@@ -84,18 +84,27 @@ Tarefa:
 Classificar o alinhamento do **Conteúdo** com a missão do cliente.
 
 Regras de evidência:
-- Use **apenas** o Conteúdo. Não use contexto externo.
+- Use **apenas** o Conteúdo e a descrição do cliente acima. Não utilize conhecimento próprio sobre o cliente além do que está descrito neste prompt.
 - NÃO exija que o Conteúdo cubra TODA a missão do cliente.
   # Se o Conteúdo estiver claramente dentro de ao menos UMA frente/eixo relevante do cliente, marque "Alinha".
   # A ausência de menção a outras frentes (ex.: socioemocional) NÃO reduz automaticamente para "Parcial".
-- Use "Parcial" apenas quando houver INSUFICIÊNCIA ou AMBIGUIDADE no texto para decidir.
+- Use "Parcial" apenas nos dois casos descritos abaixo — não como classe-padrão para dúvidas genéricas.
 - Se o texto for claramente de natureza incompatível com triagem temática (ex.: decisão sobre caso individual sem política pública; deferimento/indeferimento nominal; concessão pontual; nomeação/dispensa rotineira sem tema; mero expediente administrativo sem objeto; publicação que não permite inferir assunto), marque "Não se aplica".
 
 Classes (escolha exatamente UMA):
 - "Alinha": O objeto/tema do Conteúdo é claro e há evidência explícita de relação com pelo menos 1 frente/eixo do cliente.
-- "Parcial": O Conteúdo sugere relação, mas é genérico, incompleto ou não permite identificar com segurança o objeto/tema.
+- "Parcial": Use SOMENTE em um destes dois casos:
+    (a) Ambiguidade temática — o Conteúdo trata de tema que poderia ou não se encaixar na missão, mas o texto é insuficiente para decidir com segurança;
+    (b) Cobertura incompleta — o Conteúdo aborda parcialmente o tema do cliente, mas mistura substancialmente outras agendas não relacionadas, de modo que a relevância é real porém limitada.
 - "Não Alinha": O tema é claro e não tem relação com a missão do cliente.
 - "Não se aplica": O Conteúdo não é classificável por tema/escopo do cliente com base no texto (exemplos acima), ou é predominantemente ato individual/procedimental sem política pública inferível.
+
+Restrições estruturais obrigatórias:
+- NÃO inclua qualquer metacomentário sobre a classificação.
+- NÃO mencione que está classificando, analisando ou respondendo ao prompt.
+- A justificativa deve conter APENAS uma descrição objetiva do que o Conteúdo trata (objeto/tema).
+- NÃO explique impactos potenciais, intenções do autor ou interpretações jurídicas.
+- NÃO utilize linguagem avaliativa ou argumentativa.
 
 Formato de saída:
 Retorne **somente** JSON válido neste formato:
@@ -105,8 +114,10 @@ Retorne **somente** JSON válido neste formato:
 }
 
 Conteúdo:
-\"\"\"$conteudo\"\"\"
-""".strip())
+<conteudo>
+$conteudo
+</conteudo>""".strip()
+)
 
 
 def _gs_client():
@@ -143,7 +154,12 @@ def classify_text(cliente_nome: str, conteudo: str) -> dict:
         f"Organização '{cliente_nome}' com foco temático conforme sua atuação pública.",
     )
 
-    prompt = PROMPT.substitute(cliente=cliente_nome, descricao=desc, conteudo=conteudo)
+    # Sanitiza o conteúdo para não quebrar o delimitador XML do prompt.
+    # Substitui </conteudo> por uma versão com zero-width space para neutralizar
+    # qualquer fechamento prematuro da tag caso o texto do DOU contenha esse padrão.
+    conteudo_safe = conteudo.replace("</conteudo>", "</conteudo\u200b>")
+
+    prompt = PROMPT.substitute(cliente=cliente_nome, descricao=desc, conteudo=conteudo_safe)
 
     stream = genai_client.models.generate_content_stream(
         model=MODEL_NAME,
@@ -170,11 +186,9 @@ def classify_text(cliente_nome: str, conteudo: str) -> dict:
 
 
 def _ensure_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Garante que todas as colunas canônicas existam, inclusive Seção."""
     for col in COLS_CANONICAL:
         if col not in df.columns:
             df[col] = ""
-    # Reordena para a ordem canônica, preservando colunas extras no final
     extras = [c for c in df.columns if c not in COLS_CANONICAL]
     df = df[COLS_CANONICAL + extras]
     return df
