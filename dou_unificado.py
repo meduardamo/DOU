@@ -87,11 +87,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Novo Programa de Aceleração do Crescimento"),
     _wholeword_pattern("Novo Programa de Aceleracao do Crescimento"),
 
-    # Retificação
-    _wholeword_pattern("Retificação"),
-    _wholeword_pattern("Retificacao"),
-    re.compile(r"\bretifica[cç][aã]o\b", re.I),
-
     # Registro Especial
     _wholeword_pattern("Registro Especial"),
     re.compile(r"\bregesp\b", re.I),
