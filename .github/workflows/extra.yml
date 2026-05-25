@@ -1,22 +1,29 @@
 name: DOU Extra
+
 on:
   schedule:
-    - cron: '0 */3 * * *'   # a cada 3 horas
+    # Horários BRT (UTC-3): 12:00, 15:00, 18:00, 21:00 — somente após o meio-dia
+    - cron: '0 15,18,21,0 * * *'
   workflow_dispatch:
+
 jobs:
   run-extra:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Create credentials.json from secret
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
@@ -32,6 +39,7 @@ jobs:
           pathlib.Path("credentials.json").write_text(json.dumps(info), encoding="utf-8")
           print("✅ credentials.json criado")
           PY
+
       - name: Run DOU scraping (extra)
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
@@ -42,6 +50,7 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: |
           python dou_unificado.py extra
+
       - name: Run DOU alignment (per client tabs)
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
