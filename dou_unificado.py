@@ -8,7 +8,7 @@ import unicodedata
 import requests
 import gspread
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import Counter
 
 from google.oauth2.service_account import Credentials
@@ -1321,8 +1321,8 @@ def executar_regular():
     )
 
 
-def executar_extra():
-    conteudo = raspa_dou_extra()
+def executar_extra(data: str | None = None):
+    conteudo = raspa_dou_extra(data=data)
 
     geral = procura_termos(conteudo)
     _qtd_g, ins_g, _sh, ws_geral = salva_na_base(geral)
@@ -1330,17 +1330,17 @@ def executar_extra():
     por_cliente = procura_termos_clientes(conteudo)
     _qtd_c, ins_c, _sh_c, _gids = salva_por_cliente(por_cliente)
 
-    hoje = datetime.now().strftime("%d-%m-%Y")
+    data_label = data or datetime.now().strftime("%d-%m-%Y")
     hora = datetime.now().strftime("%H:%M")
     envia_emails_edicao(
         edicao_label="Edição Extra",
-        subtitulo=f"Edição Extra — {hoje} {hora}",
+        subtitulo=f"Edição Extra — {data_label} {hora}",
         inserted_geral=ins_g,
         inserted_clientes=ins_c,
         planilha_id=os.getenv("PLANILHA", ""),
         planilha_gid=_ws_gid(ws_geral) if ws_geral else None,
         planilha_clientes_id=os.getenv("PLANILHA_CLIENTES", ""),
-        subject_prefix=f"DOU Extra — {hoje} {hora}",
+        subject_prefix=f"DOU Extra — {data_label} {hora}",
     )
 
 
@@ -1357,5 +1357,9 @@ if __name__ == "__main__":
         executar_regular()
     elif modo == "extra":
         executar_extra()
+    elif modo == "extra_retroativo":
+        executar_extra()
+        ontem = (datetime.now() - timedelta(days=1)).strftime("%d-%m-%Y")
+        executar_extra(data=ontem)
     else:
         executar_tudo()
