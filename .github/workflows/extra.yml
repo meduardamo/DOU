@@ -2,8 +2,9 @@ name: DOU Extra
 
 on:
   schedule:
-    # Horários BRT (UTC-3): 12:00, 15:00, 18:00, 21:00 — somente após o meio-dia
-    - cron: '0 15,18,21,0 * * *'
+    # Horários BRT (UTC-3): 02:00, 12:00, 15:00, 18:00, 21:00
+    # Run das 02h busca hoje + ontem (retroativo) — os demais idem, dedup protege
+    - cron: '0 0,5,15,18,21 * * *'
   workflow_dispatch:
 
 jobs:
@@ -21,7 +22,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Create credentials.json from secret
