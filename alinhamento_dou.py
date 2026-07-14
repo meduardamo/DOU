@@ -8,7 +8,7 @@ from string import Template
 
 # CONFIG
 GENAI_API_KEY     = os.getenv("GENAI_API_KEY", "")
-MODEL_NAME        = "gemini-3.5-flash"
+MODEL_NAME        = "gemini-2.5-flash"
 PLANILHA_CLIENTES = os.getenv("PLANILHA_CLIENTES")
 SKIP_SHEETS       = {"Giro de notícias", "Mevo"}
 
