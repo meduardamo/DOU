@@ -18,6 +18,15 @@ from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
 
+# Timezone BR — evita raspar a data errada perto da meia-noite UTC.
+try:
+    from zoneinfo import ZoneInfo
+except Exception:  # py<3.9
+    from backports.zoneinfo import ZoneInfo  # type: ignore
+
+TZ_BR = ZoneInfo("America/Sao_Paulo")
+now_br = lambda: datetime.now(TZ_BR)
+
 
 # ---------------------------------------------------------------------------
 # Normalização
@@ -467,7 +476,7 @@ def _raspa_secoes(data: str, secoes: list[str], campo_secao: str = "secao") -> d
 
 def raspa_dou(data: str | None = None, secoes: list[str] | None = None) -> dict | None:
     if data is None:
-        data = datetime.now().strftime("%d-%m-%Y")
+        data = now_br().strftime("%d-%m-%Y")
     if secoes is None:
         secoes = [s.strip() for s in (os.getenv("DOU_SECOES") or "DO1,DO2,DO3").split(",") if s.strip()]
     secoes = [s.upper() for s in secoes]
@@ -477,7 +486,7 @@ def raspa_dou(data: str | None = None, secoes: list[str] | None = None) -> dict 
 
 def raspa_dou_extra(data: str | None = None, secoes: list[str] | None = None) -> dict | None:
     if data is None:
-        data = datetime.now().strftime("%d-%m-%Y")
+        data = now_br().strftime("%d-%m-%Y")
     if secoes is None:
         secoes = [s.strip() for s in (os.getenv("DOU_EXTRA_SECOES") or "DO1E,DO2E,DO3E").split(",") if s.strip()]
     secoes = [s.upper() for s in secoes]
@@ -1342,8 +1351,8 @@ def envia_emails_edicao(
 # Entrypoints
 # ---------------------------------------------------------------------------
 
-def executar_regular():
-    conteudo = raspa_dou()
+def executar_regular(data: str | None = None):
+    conteudo = raspa_dou(data=data)
 
     geral = procura_termos(conteudo)
     _qtd_g, ins_g, _sh, ws_geral = salva_na_base(geral)
@@ -1351,7 +1360,7 @@ def executar_regular():
     por_cliente = procura_termos_clientes(conteudo)
     _qtd_c, ins_c, _sh_c, _gids = salva_por_cliente(por_cliente)
 
-    hoje = datetime.now().strftime("%d-%m-%Y")
+    hoje = data or now_br().strftime("%d-%m-%Y")
     envia_emails_edicao(
         edicao_label="Edição Regular",
         subtitulo=f"Edição Regular — {hoje}",
@@ -1373,8 +1382,8 @@ def executar_extra(data: str | None = None):
     por_cliente = procura_termos_clientes(conteudo)
     _qtd_c, ins_c, _sh_c, _gids = salva_por_cliente(por_cliente)
 
-    data_label = data or datetime.now().strftime("%d-%m-%Y")
-    hora = datetime.now().strftime("%H:%M")
+    data_label = data or now_br().strftime("%d-%m-%Y")
+    hora = now_br().strftime("%H:%M")
     envia_emails_edicao(
         edicao_label="Edição Extra",
         subtitulo=f"Edição Extra — {data_label} {hora}",
@@ -1396,13 +1405,16 @@ if __name__ == "__main__":
     import sys
     modo = sys.argv[1] if len(sys.argv) > 1 else "tudo"
 
+    # Backfill de um dia específico (formato dd-mm-aaaa). Vazio = hoje.
+    data_env = os.getenv("DOU_DATE", "").strip() or None
+
     if modo == "regular":
-        executar_regular()
+        executar_regular(data=data_env)
     elif modo == "extra":
-        executar_extra()
+        executar_extra(data=data_env)
     elif modo == "extra_retroativo":
         executar_extra()
-        ontem = (datetime.now() - timedelta(days=1)).strftime("%d-%m-%Y")
+        ontem = (now_br() - timedelta(days=1)).strftime("%d-%m-%Y")
         executar_extra(data=ontem)
     else:
         executar_tudo()
