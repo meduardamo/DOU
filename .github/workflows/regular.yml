@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 8 * * *'   # 05:00 BRT — entrega esperada até 07:30 BRT absorvendo delay do GitHub
   workflow_dispatch:
+    inputs:
+      data:
+        description: "Backfill de um dia (dd-mm-aaaa). Vazio = hoje."
+        required: false
+        default: ""
 
 jobs:
   run-script:
@@ -51,6 +56,7 @@ jobs:
           EMAIL: ${{ secrets.EMAIL }}
           DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          DOU_DATE: ${{ github.event.inputs.data }}  # backfill dd-mm-aaaa; vazio = hoje
         run: |
           python dou_unificado.py regular
 
