@@ -476,6 +476,21 @@ def raspa_dou_extra(data: str | None = None, secoes: list[str] | None = None) ->
 # Palavras-chave gerais
 # ---------------------------------------------------------------------------
 
+# Na Seção 3, uma palavra-chave sozinha gera muito ruído. Por isso, tanto no
+# monitor geral quanto no monitor por cliente, a publicação só entra quando
+# também contém um termo típico dessa seção.
+TERMOS_SECAO_3 = [
+    "edital", "editais",
+    "consulta pública", "consultas públicas",
+    "chamamento público", "chamamentos públicos",
+    "credenciamento", "credenciamentos",
+    "seleção pública", "seleções públicas",
+]
+_PATTERNS_SECAO_3 = [
+    (termo, _wholeword_pattern(termo)) for termo in TERMOS_SECAO_3
+]
+
+
 PALAVRAS_GERAIS = [
     "Infância", "Criança", "Infantil", "Infâncias", "Crianças",
     "Educação", "Ensino", "Escolaridade",
@@ -503,8 +518,6 @@ PALAVRAS_GERAIS = [
 ]
 _PATTERNS_GERAL = [(kw, _wholeword_pattern(kw)) for kw in PALAVRAS_GERAIS]
 
-_SECAO_GERAL_BLOQUEADAS = {"DO3", "DO3E"}
-
 
 def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") -> dict | None:
     if not conteudo_raspado or "jsonArray" not in conteudo_raspado:
@@ -521,14 +534,20 @@ def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") ->
         link = URL_BASE + (r.get("urlTitle", "") or "")
         data_pub = (r.get("pubDate", "") or "")[:10]
         secao = (r.get(campo_secao, "") or "").strip().upper()
+        eh_secao_3 = secao in {"DO3", "DO3E"}
 
-        if secao in _SECAO_GERAL_BLOQUEADAS:
-            continue
-
-        if _is_blocked(titulo + " " + resumo):
+        # Na Seção 3, termos que antes eram excluídos (como "chamamento
+        # público") passam a ser justamente parte do filtro de relevância.
+        if not eh_secao_3 and _is_blocked(titulo + " " + resumo):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
+
+        if eh_secao_3 and not any(
+            pat and pat.search(texto_norm) for _termo, pat in _PATTERNS_SECAO_3
+        ):
+            continue
+
         conteudo_pagina = None
 
         for palavra, patt in _PATTERNS_GERAL:
@@ -626,19 +645,25 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
         link = URL_BASE + (r.get("urlTitle", "") or "")
         data_pub = (r.get("pubDate", "") or "")[:10]
         secao = (r.get(campo_secao, "") or "").strip().upper()
+        eh_secao_3 = secao in {"DO3", "DO3E"}
 
         if not link:
             continue
-        if _is_blocked(titulo + " " + resumo):
+        # Na Seção 3, termos que antes eram excluídos (como "chamamento
+        # público") passam a ser justamente parte do filtro de relevância.
+        if not eh_secao_3 and _is_blocked(titulo + " " + resumo):
             continue
 
         texto_norm = _normalize_ws(titulo + " " + resumo)
 
+        if eh_secao_3 and not any(
+            pat and pat.search(texto_norm) for _termo, pat in _PATTERNS_SECAO_3
+        ):
+            continue
+
         hits = []
         for pat, cliente, kw in CLIENT_PATTERNS:
             if not pat.search(texto_norm):
-                continue
-            if secao in {"DO3", "DO3E"}:
                 continue
             hits.append((cliente, kw))
 
