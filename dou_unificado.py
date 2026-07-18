@@ -352,10 +352,22 @@ def _baixar_conteudo_pagina(url: str) -> str:
         return ""
     if url in _CONTENT_CACHE:
         return _CONTENT_CACHE[url]
+    page_text = None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, timeout=40, headers=_HDR, allow_redirects=True)
+            r.raise_for_status()
+            page_text = r.text
+            break
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(5 * (attempt + 1))
+            else:
+                print(f"[conteudo] falha ao baixar (3 tentativas) {url}: {e}")
+                return ""
+
     try:
-        r = requests.get(url, timeout=40, headers=_HDR, allow_redirects=True)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
+        soup = BeautifulSoup(page_text, "html.parser")
         for t in soup(["script", "style", "noscript"]):
             t.decompose()
 
@@ -397,7 +409,8 @@ def _baixar_conteudo_pagina(url: str) -> str:
             txt = txt[:CONTEUDO_MAX] + "…"
         _CONTENT_CACHE[url] = txt
         return txt
-    except Exception:
+    except Exception as e:
+        print(f"[conteudo] falha ao parsear {url}: {e}")
         return ""
 
 
@@ -541,27 +554,26 @@ def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") ->
         if not eh_secao_3 and _is_blocked(titulo + " " + resumo):
             continue
 
-        texto_norm = _normalize_ws(titulo + " " + resumo)
+        # Gate barato no título+resumo: o termo-âncora da Seção 3 continua
+        # exigido aqui, para não baixar conteúdo à toa fora de edital/seleção.
+        titulo_resumo_norm = _normalize_ws(titulo + " " + resumo)
 
         if eh_secao_3 and not any(
-            pat and pat.search(texto_norm) for _termo, pat in _PATTERNS_SECAO_3
+            pat and pat.search(titulo_resumo_norm) for _termo, pat in _PATTERNS_SECAO_3
         ):
             continue
 
-        conteudo_pagina = None
+        # Busca a palavra-chave no conteúdo COMPLETO (título + resumo + corpo).
+        conteudo_pagina = _baixar_conteudo_pagina(link) if r.get("urlTitle") else ""
+        texto_norm = _normalize_ws(f"{titulo} {resumo} {conteudo_pagina or ''}")
 
         for palavra, patt in _PATTERNS_GERAL:
             if not (patt and patt.search(texto_norm)):
                 continue
 
             if palavra.strip().lower() == "bebidas alcoólicas":
-                if conteudo_pagina is None:
-                    conteudo_pagina = _baixar_conteudo_pagina(link)
                 if _is_bebidas_ato_irrelevante(f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"):
                     continue
-
-            if conteudo_pagina is None:
-                conteudo_pagina = _baixar_conteudo_pagina(link)
 
             if _is_ato_decisao_empresa_irrelevante(f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"):
                 continue
@@ -654,12 +666,16 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
         if not eh_secao_3 and _is_blocked(titulo + " " + resumo):
             continue
 
-        texto_norm = _normalize_ws(titulo + " " + resumo)
+        titulo_resumo_norm = _normalize_ws(titulo + " " + resumo)
 
         if eh_secao_3 and not any(
-            pat and pat.search(texto_norm) for _termo, pat in _PATTERNS_SECAO_3
+            pat and pat.search(titulo_resumo_norm) for _termo, pat in _PATTERNS_SECAO_3
         ):
             continue
+
+        # Busca as keywords do cliente no conteúdo COMPLETO (título + resumo + corpo).
+        conteudo_pagina = _baixar_conteudo_pagina(link) if r.get("urlTitle") else ""
+        texto_norm = _normalize_ws(f"{titulo} {resumo} {conteudo_pagina or ''}")
 
         hits = []
         for pat, cliente, kw in CLIENT_PATTERNS:
@@ -670,7 +686,6 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
         if not hits:
             continue
 
-        conteudo_pagina = _baixar_conteudo_pagina(link)
         alltxt = f"{titulo}\n{resumo}\n{conteudo_pagina or ''}"
 
         if any(kw.strip().lower() == "bebidas alcoólicas" for _, kw in hits):
