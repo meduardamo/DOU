@@ -2,7 +2,7 @@ name: DOU Cargos
 
 on:
   schedule:
-    - cron: "0 10 * * *" # 07:00 BRT (10:00 UTC)
+    - cron: "12 10 * * *" # 07:12 BRT (10:00 UTC)
   workflow_dispatch:
 
 jobs:
