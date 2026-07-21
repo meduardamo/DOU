@@ -1,8 +1,11 @@
 name: DOU Regular
 
 on:
-  schedule:
-    - cron: '8 8 * * *'   # 05:00 BRT — entrega esperada até 07:30 BRT absorvendo delay do GitHub
+  # SEM schedule de proposito. O dou_unificado.py envia email toda vez que
+  # roda, sem trava de 'ja enviei hoje', entao dois gatilhos no mesmo dia
+  # sao dois emails para a equipe. Com o disparo externo das 05:40 pelo
+  # cron-job.org, manter o cron aqui como rede de seguranca causaria
+  # exatamente esse flood. O DOU Extra e que pode enviar ao longo do dia.
   # Disparo externo, em horario exato. O cron agendado atrasa de 80 a 176 min
   # (mediana 121, medido em 14 dias), e com isso o DOU so ficava pronto depois
   # das 7h em 9 dos 14 dias. Um agendador de fora chama
