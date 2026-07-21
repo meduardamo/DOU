@@ -2,7 +2,7 @@ name: DOU Regular
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # 05:00 BRT — entrega esperada até 07:30 BRT absorvendo delay do GitHub
+    - cron: '8 8 * * *'   # 05:00 BRT — entrega esperada até 07:30 BRT absorvendo delay do GitHub
   workflow_dispatch:
     inputs:
       data:
