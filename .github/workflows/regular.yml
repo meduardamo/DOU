@@ -3,6 +3,14 @@ name: DOU Regular
 on:
   schedule:
     - cron: '8 8 * * *'   # 05:00 BRT — entrega esperada até 07:30 BRT absorvendo delay do GitHub
+  # Disparo externo, em horario exato. O cron agendado atrasa de 80 a 176 min
+  # (mediana 121, medido em 14 dias), e com isso o DOU so ficava pronto depois
+  # das 7h em 9 dos 14 dias. Um agendador de fora chama
+  # POST /repos/meduardamo/DOU/dispatches com {"event_type": "raspar-dou"}
+  # e o run comeca em segundos. O cron abaixo fica como rede de seguranca.
+  repository_dispatch:
+    types: [raspar-dou]
+
   workflow_dispatch:
     inputs:
       data:
