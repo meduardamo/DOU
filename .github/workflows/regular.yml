@@ -18,6 +18,14 @@ on:
         required: false
         default: ""
 
+# Uma rodada por vez. Com o disparo externo somado ao cron de seguranca, dois
+# gatilhos podem se sobrepor num dia de atraso; aconteceu ao vivo em 21/07,
+# quando tres test runs rodaram juntos. Duas raspagens simultaneas do mesmo dia
+# significam trabalho duplicado e risco de notificacao repetida pra equipe.
+concurrency:
+  group: dou-regular
+  cancel-in-progress: false
+
 jobs:
   run-script:
     runs-on: ubuntu-latest
