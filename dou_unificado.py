@@ -773,13 +773,59 @@ def _ws_gid(ws) -> str:
         return ""
 
 
+# Erros transitórios do Google Sheets. A raspagem do DOU já tem retry próprio,
+# mas as chamadas ao Sheets não tinham: em 28/07/2026 um 500 na leitura da base
+# derrubou o run inteiro com o DOU já raspado, e em 23/07 foi um 429 de cota.
+_GS_TRANSITORIO_LEITURA = {429, 500, 502, 503, 504}
+# Em escrita só repetimos o que com certeza não chegou a ser aplicado: 429 é
+# recusa por cota e 503 é indisponibilidade, ambos antes de gravar. Um 500 pode
+# ter gravado antes de falhar, e repetir duplicaria linhas (a deduplicação aqui
+# é feita na leitura, não na gravação), então ele sobe e o run falha alto.
+_GS_TRANSITORIO_ESCRITA = {429, 503}
+
+
+def _gs_codigo(erro) -> int | None:
+    """Código HTTP de um erro do gspread, por qualquer um dos caminhos."""
+    resposta = getattr(erro, "response", None)
+    codigo = getattr(resposta, "status_code", None)
+    if isinstance(codigo, int):
+        return codigo
+    codigo = getattr(erro, "code", None)
+    if isinstance(codigo, int):
+        return codigo
+    m = re.search(r"\[(\d{3})\]", str(erro))
+    return int(m.group(1)) if m else None
+
+
+def _gs_retry(descricao: str, fn, *args, _escrita: bool = False, **kwargs):
+    """Repete uma chamada ao Sheets em erro transitório: 10s, 20s, 40s."""
+    repetiveis = _GS_TRANSITORIO_ESCRITA if _escrita else _GS_TRANSITORIO_LEITURA
+    ultimo = None
+    for tentativa in range(4):
+        try:
+            return fn(*args, **kwargs)
+        except gspread.exceptions.APIError as e:
+            codigo = _gs_codigo(e)
+            if codigo not in repetiveis:
+                raise
+            ultimo = e
+            if tentativa == 3:
+                break
+            espera = 10 * (2 ** tentativa)
+            print(f"[sheets] {descricao}: erro {codigo}, tentativa "
+                  f"{tentativa + 1}/4 falhou. Aguardando {espera}s...")
+            time.sleep(espera)
+    print(f"[sheets] {descricao}: falhou após 4 tentativas.")
+    raise ultimo
+
+
 def _fix_header(ws, all_vals: list[list], header: list[str]) -> None:
     """Corrige cabeçalho usando dados já lidos em memória — zero chamadas extras à API."""
     current = all_vals[0] if all_vals else []
     if current == header:
         return
     ws.resize(rows=max(2, ws.row_count), cols=len(header))
-    ws.update("1:1", [header])
+    _gs_retry("corrigir cabeçalho", ws.update, "1:1", [header], _escrita=True)
     # atualiza all_vals in-place para refletir o novo header
     if all_vals:
         all_vals[0] = header
@@ -797,14 +843,14 @@ def salva_na_base(palavras_raspadas: dict | None) -> tuple[int, list, object | N
     if not planilha_id:
         raise RuntimeError("Env PLANILHA não definido.")
 
-    sh = gc.open_by_key(planilha_id)
+    sh = _gs_retry("abrir planilha geral", gc.open_by_key, planilha_id)
     try:
-        ws = sh.worksheet("Página1")
+        ws = _gs_retry("abrir aba geral", sh.worksheet, "Página1")
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title="Página1", rows="2000", cols=str(len(COLS_GERAL)))
 
     # 1 leitura única — header + dados juntos
-    all_vals = ws.get_all_values()
+    all_vals = _gs_retry("ler base geral", ws.get_all_values)
     _fix_header(ws, all_vals, COLS_GERAL)
 
     link_idx = COLS_GERAL.index("Link")
@@ -847,7 +893,8 @@ def salva_na_base(palavras_raspadas: dict | None) -> tuple[int, list, object | N
             existing.add(key)
 
     if rows_to_insert:
-        ws.insert_rows(rows_to_insert, row=2, value_input_option="USER_ENTERED")
+        _gs_retry("gravar linhas na base geral", ws.insert_rows, rows_to_insert,
+                  row=2, value_input_option="USER_ENTERED", _escrita=True)
         print(f"{len(rows_to_insert)} linhas adicionadas (geral).")
     else:
         print("Nenhuma linha nova (geral).")
@@ -862,7 +909,7 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
         return 0, {}, None, {}
 
     gc = _gs_client_from_env()
-    sh = gc.open_by_key(plan_id)
+    sh = _gs_retry("abrir planilha de clientes", gc.open_by_key, plan_id)
 
     link_idx = COLS_CLIENTE.index("Link")
     kw_idx   = COLS_CLIENTE.index("Palavra-chave")
@@ -877,11 +924,12 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
 
     for cli in CLIENT_KEYWORDS:
         try:
-            ws = sh.worksheet(cli)
+            ws = _gs_retry(f"abrir aba {cli}", sh.worksheet, cli)
         except gspread.WorksheetNotFound:
             ws = sh.add_worksheet(title=cli, rows="2", cols=len(COLS_CLIENTE))
 
-        all_vals = ws.get_all_values()          # única leitura por cliente
+        # única leitura por cliente
+        all_vals = _gs_retry(f"ler aba {cli}", ws.get_all_values)
         _fix_header(ws, all_vals, COLS_CLIENTE) # corrige header em memória + API se necessário
 
         ws_map[cli] = ws
@@ -933,7 +981,9 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
             existing.add(key)
 
         if new_rows:
-            ws_map[cli].insert_rows(new_rows, row=2, value_input_option="USER_ENTERED")
+            _gs_retry(f"gravar linhas de {cli}", ws_map[cli].insert_rows,
+                      new_rows, row=2, value_input_option="USER_ENTERED",
+                      _escrita=True)
             print(f"[{cli}] +{len(new_rows)} linhas.")
             total_new += len(new_rows)
             inserted_map[cli] = inserted_items
