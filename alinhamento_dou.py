@@ -7,7 +7,7 @@ from google import genai
 from string import Template
 
 # CONFIG
-GENAI_API_KEY     = os.getenv("GENAI_API_KEY", "")
+GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY", "")
 MODEL_NAME        = "gemini-3.6-flash"   # 2.5-flash dá 404 para a chave do projeto novo
 PLANILHA_CLIENTES = os.getenv("PLANILHA_CLIENTES")
 SKIP_SHEETS       = {"Giro de notícias", "Mevo"}
@@ -172,7 +172,7 @@ def _gs_client():
     return gspread.authorize(creds)
 
 
-genai_client = genai.Client(api_key=GENAI_API_KEY)
+genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def classify_text(cliente_nome: str, conteudo: str) -> dict:

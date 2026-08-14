@@ -83,6 +83,6 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
           PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
-          GENAI_API_KEY: ${{ secrets.GENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python alinhamento_dou.py
