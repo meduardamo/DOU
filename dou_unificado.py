@@ -100,42 +100,6 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Registro Especial"),
     re.compile(r"\bregesp\b", re.I),
 
-    # Licitações
-    _wholeword_pattern("Licitação"),
-    _wholeword_pattern("Licitacao"),
-    _wholeword_pattern("Pregão"),
-    _wholeword_pattern("Pregao"),
-    _wholeword_pattern("Tomada de Preços"),
-    _wholeword_pattern("Tomada de Precos"),
-    _wholeword_pattern("Chamamento Público"),
-    _wholeword_pattern("Chamamento Publico"),
-    _wholeword_pattern("Dispensa de Licitação"),
-    _wholeword_pattern("Dispensa de Licitacao"),
-    _wholeword_pattern("Inexigibilidade"),
-    _wholeword_pattern("Aviso de Licitação"),
-    _wholeword_pattern("Aviso de Licitacao"),
-    _wholeword_pattern("Cotação eletrônica"),
-    _wholeword_pattern("Cotacao eletronica"),
-    re.compile(r"\b(preg[aã]o|concorr[eê]ncia|tomada\s+de\s+pre[cç]os|inexigibilidade)\b", re.I),
-    re.compile(r"\b(aviso\s+de\s+licita[cç][aã]o|edital\s+(de\s+)?licita[cç][aã]o|chamamento\s+p[uú]blico)\b", re.I),
-    re.compile(r"\bdispensa\s+de\s+licita[cç][aã]o\b", re.I),
-
-    # Prorrogações / extratos
-    _wholeword_pattern("Extrato de Contrato"),
-    _wholeword_pattern("Extrato do Contrato"),
-    _wholeword_pattern("Extrato de Termo Aditivo"),
-    _wholeword_pattern("Extrato do Termo Aditivo"),
-    _wholeword_pattern("Aditamento"),
-    _wholeword_pattern("Prorrogação de Prazo"),
-    _wholeword_pattern("Prorrogacao de Prazo"),
-    _wholeword_pattern("Prorrogação de Vigência"),
-    _wholeword_pattern("Prorrogacao de Vigencia"),
-    _wholeword_pattern("Termo de Prorrogação"),
-    _wholeword_pattern("Termo de Prorrogacao"),
-    _wholeword_pattern("Apostilamento"),
-    re.compile(r"\b(prorrog(a|ã)o|prorroga-se|aditivo|apostilamento|vig[eê]ncia)\b.*\b(contrato|conv[eê]nio)\b", re.I),
-    re.compile(r"\bextrato\b.*\b(contrato|termo\s+aditivo|conv[eê]nio)\b", re.I),
-
     # Radiodifusão
     _wholeword_pattern("Radiodifusão"),
     _wholeword_pattern("Radiodifusao"),
@@ -149,6 +113,139 @@ EXCLUDE_PATTERNS = [
     _wholeword_pattern("Retransmissao de Televisao"),
     re.compile(r"\b(radiodifus[aã]o|rtv|retransmiss[aã]o|outorga|canal\s+\d+)\b", re.I),
 ]
+
+# Os padroes abaixo rodam sobre o texto ja normalizado por _normalize_ws, que
+# derruba acento e pontuacao. Por isso sao escritos em ASCII e sem acento:
+# "licitacao", "processo n 123", "concessao".
+
+# Licitacao, contratos e editais administrativos. Diferente dos demais
+# bloqueios, valem tambem na Secao 3, que e onde esse tipo de ato aparece.
+# Aqui ficam os cabecalhos que dizem o tipo do ato: valem no titulo+resumo e
+# tambem no corpo da pagina, porque cada pagina do DOU e um ato so.
+_LICITACAO_ATO_PATTERNS = [
+    re.compile(r"\b(aviso|avisos) de licitacao\b"),
+    re.compile(r"\b(aviso|avisos) de (pregao|concorrencia|dispensa|inexigibilidade|contratacao direta)\b"),
+    re.compile(r"\b(edital|editais) (de )?licitac(ao|oes)\b"),
+    re.compile(r"\bpregao (eletronico|presencial)\b"),
+    # ata de registro de precos
+    re.compile(r"\b(ata|atas) de (registro|registros) de precos?\b"),
+    # editais de notificacao e de intimacao
+    re.compile(r"\b(edital|editais) de (notificacao|notificacoes|intimacao|intimacoes)\b"),
+    # credenciamento so sai quando e aviso; chamamento publico continua entrando
+    re.compile(r"\b(aviso|avisos) de credenciamento\b"),
+    # extratos de contrato e de termo aditivo
+    re.compile(r"\bextrato de (contrato|contratos|termo aditivo|termos aditivos|convenio)\b"),
+    re.compile(r"\bextrato\b.{0,80}\b(contrato|termo aditivo|convenio)\b"),
+]
+
+# Termos que sozinhos indicam licitacao no titulo+resumo, mas que no corpo da
+# pagina podem ser so citacao (a Lei de Licitacoes aparece em ato normativo).
+# Por isso ficam fora da checagem do conteudo.
+_LICITACAO_TERMO_PATTERNS = [
+    _wholeword_pattern("Licitação"),
+    _wholeword_pattern("Licitatório"),
+    _wholeword_pattern("Pregão"),
+    _wholeword_pattern("Tomada de Preços"),
+    _wholeword_pattern("Dispensa de Licitação"),
+    _wholeword_pattern("Inexigibilidade"),
+    _wholeword_pattern("Cotação eletrônica"),
+    _wholeword_pattern("Aditamento"),
+    _wholeword_pattern("Apostilamento"),
+    _wholeword_pattern("Prorrogação de Prazo"),
+    _wholeword_pattern("Prorrogação de Vigência"),
+    _wholeword_pattern("Termo de Prorrogação"),
+    _wholeword_pattern("Registro de Preços"),
+    re.compile(r"\b(pregao|concorrencia|tomada de precos|inexigibilidade)\b"),
+    re.compile(r"\b(prorrogacao|prorroga se|aditivo|apostilamento|vigencia)\b.{0,80}\b(contrato|convenio)\b"),
+]
+
+# Unica excecao dentro do bloco acima: edital de chamamento publico, que a
+# equipe acompanha.
+_CHAMAMENTO_PATTERNS = [
+    _wholeword_pattern("Chamamento Público"),
+    _wholeword_pattern("Chamamentos Públicos"),
+]
+
+# Publicacao de processo individual: ato que decide um caso especifico
+# (cassacao de autorizacao, extincao de outorga) e cita o numero do processo.
+_PROCESSO_NUM_REGEX = re.compile(r"\bprocessos?( administrativos?)?( sei)? n[o]? ?\d")
+
+_ATO_INDIVIDUAL_PATTERNS = [
+    re.compile(r"\bcassacao\b"),
+    re.compile(r"\bpor cassacao\b"),
+    re.compile(r"\bdeclarar? extint[ao]\b"),
+    re.compile(r"\bextincao d[ae] (autorizacao|outorga|permissao|concessao)\b"),
+    re.compile(r"\b(autorizacao|outorga) outorgada a\b"),
+    re.compile(r"\barquivamento do processo\b"),
+    re.compile(r"\bcpf n\b"),
+]
+
+# Temas que o monitoramento nao acompanha. Valem em todas as secoes, mas so no
+# titulo+resumo: no corpo de um ato relevante esses termos podem aparecer de
+# passagem (uma norma de energia cita unidade geradora, uma de pessoal da saude
+# cita gratificacao).
+_TEMAS_FORA_PATTERNS = [
+    # portaria de pessoal ligada a universidade / instituto federal
+    re.compile(
+        r"\b(nomear|nomeia|nomeacao|designar|designa|designacao|exonerar|exonera|exoneracao|"
+        r"dispensar|dispensa|remocao|remover|redistribuicao|redistribuir|lotacao|substituto eventual)\b"
+        r".{0,120}\b(universidade|universidades|instituto federal|institutos federais|reitoria|pro reitoria|campus)\b"
+    ),
+    re.compile(
+        r"\b(universidade|universidades|instituto federal|institutos federais|reitoria|pro reitoria|campus)\b"
+        r".{0,120}\b(nomear|nomeia|nomeacao|designar|designa|designacao|exonerar|exonera|exoneracao|"
+        r"dispensar|dispensa|remocao|remover|redistribuicao|redistribuir|lotacao)\b"
+    ),
+    re.compile(r"\bprogressao funcional\b"),
+    re.compile(r"\bretribuicao por titulacao\b"),
+
+    # atos de servidores pesquisadores
+    re.compile(r"\bpesquisador(a|es|as)? (visitante|bolsista|colaborador|colaboradora)\b"),
+    re.compile(r"\bbolsa de produtividade em pesquisa\b"),
+    re.compile(
+        r"\bpesquisador(a|es|as)?\b.{0,80}\b(bolsa|bolsista|designacao|nomeacao|concessao|"
+        r"afastamento|contratacao|dispensa|exoneracao)\b"
+    ),
+    re.compile(
+        r"\b(bolsa|bolsista|designacao|nomeacao|concessao|afastamento|contratacao)\b"
+        r".{0,80}\bpesquisador(a|es|as)?\b"
+    ),
+
+    # concessao de rodovia federal
+    re.compile(r"\bconcessao (da |de |do )?rodovi\w*"),
+    re.compile(r"\brodovia federal\b.{0,120}\b(aditivo|concessao|contrato|concessionaria)\b"),
+    re.compile(r"\b(aditivo|contrato) de concessao\b.{0,120}\brodovi\w*"),
+
+    # concessao de gratificacao
+    re.compile(r"\b(concede|conceder|concedida|concedido|concessao)\b.{0,80}\bgratificacao\b"),
+    re.compile(r"\bgratificacao\b.{0,80}\b(concede|conceder|concedida|concedido|concessao)\b"),
+    re.compile(r"\bgratificacao de desempenho\b"),
+    re.compile(r"\bgratificacao por encargo de curso\b"),
+
+    # operacao comercial e liberacao de unidade geradora
+    re.compile(r"\bunidades? geradoras?\b"),
+    re.compile(r"\boperacao comercial\b.{0,120}\b(usina|central geradora|uhe|ute|eol|ufv|pch|aerogerador)\b"),
+    re.compile(r"\b(usina|central geradora|uhe|ute|eol|ufv|pch|aerogerador)\b.{0,120}\boperacao comercial\b"),
+]
+
+# Mesmos temas, mas em formulacoes que identificam o tipo do ato. Estes valem
+# tambem no corpo da pagina.
+_TEMAS_FORA_ATO_PATTERNS = [
+    # classificacao indicativa de filmes e obras audiovisuais
+    re.compile(r"\bclassificacao (indicativa|etaria)\b"),
+    re.compile(r"\bclassifica\w*\b.{0,80}\b(obra audiovisual|obras audiovisuais|filme|filmes|jogo eletronico|jogos eletronicos)\b"),
+    re.compile(r"\b(obra audiovisual|obras audiovisuais|diversao publica|diversoes publicas)\b.{0,80}\bclassifica\w*\b"),
+
+    # retificacao de criterios de processo seletivo
+    re.compile(r"\bretifica\w*\b.{0,120}\bprocesso seletivo\b"),
+    re.compile(r"\bprocesso seletivo\b.{0,120}\bretifica\w*\b"),
+
+    # autorizacao individual para explorar servicos de telecomunicacoes
+    re.compile(r"\bautorizac(ao|oes)\b.{0,150}\bexplorar servicos? de telecomunicacoes\b"),
+    re.compile(r"\bexplorar servicos? de telecomunicacoes\b.{0,150}\bautorizac(ao|oes)\b"),
+    re.compile(r"\b(expedicao de|expedir|extincao de|extinguir|cassacao de|cassar) autorizac(ao|oes)\b"),
+]
+
 
 _CNE_PATTERNS = [
     _wholeword_pattern("Conselho Nacional de Educação"),
@@ -288,6 +385,43 @@ _IDEC_IRRELEVANT_PATTERNS = [
 
 def _has_any(text_norm: str, patterns) -> bool:
     return any(p and p.search(text_norm) for p in patterns)
+
+
+def _is_licitacao_irrelevante(nt: str, apenas_ato: bool = False) -> bool:
+    # Edital de chamamento público é a exceção: continua entrando.
+    if _has_any(nt, _CHAMAMENTO_PATTERNS):
+        return False
+    if _has_any(nt, _LICITACAO_ATO_PATTERNS):
+        return True
+    return not apenas_ato and _has_any(nt, _LICITACAO_TERMO_PATTERNS)
+
+
+def _is_processo_individual(nt: str) -> bool:
+    # Só bloqueia quando o número do processo vem junto de um ato que decide um
+    # caso específico. "Processo nº" sozinho aparece em publicação normativa.
+    if not _PROCESSO_NUM_REGEX.search(nt):
+        return False
+    return _has_any(nt, _ATO_INDIVIDUAL_PATTERNS)
+
+
+def _is_fora_de_escopo(text: str, apenas_ato: bool = False) -> bool:
+    """Licitação/contrato, processo individual e temas que não acompanhamos.
+
+    Vale em todas as seções, inclusive na Seção 3. Com apenas_ato=True usa só
+    os padrões que identificam o tipo do ato, para rodar sobre o conteúdo
+    baixado sem derrubar publicação relevante que cita o termo de passagem.
+    """
+    if not text:
+        return False
+    nt = _normalize_ws(text)
+
+    if _is_licitacao_irrelevante(nt, apenas_ato=apenas_ato):
+        return True
+    if _is_processo_individual(nt):
+        return True
+    if _has_any(nt, _TEMAS_FORA_ATO_PATTERNS):
+        return True
+    return not apenas_ato and _has_any(nt, _TEMAS_FORA_PATTERNS)
 
 
 def _is_blocked(text: str) -> bool:
@@ -558,8 +692,12 @@ def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") ->
         secao = (r.get(campo_secao, "") or "").strip().upper()
         eh_secao_3 = secao in {"DO3", "DO3E"}
 
-        # Na Seção 3, termos que antes eram excluídos (como "chamamento
-        # público") passam a ser justamente parte do filtro de relevância.
+        # Na Seção 3, "chamamento público" deixa de ser motivo de exclusão e
+        # passa a ser parte do filtro de relevância. O resto do bloco de
+        # licitação/contrato continua valendo lá, via _is_fora_de_escopo.
+        if _is_fora_de_escopo(titulo + " " + resumo):
+            continue
+
         if not eh_secao_3 and _is_blocked(titulo + " " + resumo):
             continue
 
@@ -574,6 +712,13 @@ def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") ->
 
         # Busca a palavra-chave no conteúdo COMPLETO (título + resumo + corpo).
         conteudo_pagina = _baixar_conteudo_pagina(link) if r.get("urlTitle") else ""
+
+        # O título+resumo do DOU muitas vezes não diz que tipo de ato é; o
+        # corpo da página diz. Cada página é um ato só, então repetir o filtro
+        # aqui não arrasta publicação relevante junto.
+        if _is_fora_de_escopo(f"{titulo}\n{resumo}\n{conteudo_pagina or ''}", apenas_ato=True):
+            continue
+
         texto_norm = _normalize_ws(f"{titulo} {resumo} {conteudo_pagina or ''}")
 
         for palavra, patt in _PATTERNS_GERAL:
@@ -610,10 +755,8 @@ def procura_termos(conteudo_raspado: dict | None, campo_secao: str = "secao") ->
 # ---------------------------------------------------------------------------
 
 CLIENT_THEME_DATA = """
-IAS|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação
 ISG|Educação|tempo integral; fundeb; ensino técnico profissionalizante; educação profissional e tecnológica; FNDE; ensino médio; propag; infraestrutura escolar; ensino fundamental integral; alfabetização integral; escola em tempo integral; programa escola em tempo integral; ensino fundamental em tempo integral; plano nacional de educação; programa pé-de-meia; PNEERQ; INEP; conselho nacional de educação; PDDE; SNE; celular nas escolas; conselhos de educação; programa de fomento às escolas de ensino médio em tempo integral
-IU|Educação|recomposição da aprendizagem; educação em tempo integral; fundeb; educação e equidade; educação profissional e tecnológica; ensino técnico profissionalizante; FNDE; gestão educacional; diretores escolares; ensino médio; adaptações de escolas; educação ambiental; plano nacional de educação; PDDE; programa pé de meia; INEP; conselho nacional de educação; VAAT; VAAR; secretaria estadual de educação; celular nas escolas; EAD
-Reúna|Educação|matemática; alfabetização; alfabetização matemática; recomposição de aprendizagem; plano nacional de educação; emendas parlamentares
+IU|Educação|recomposição da aprendizagem; educação em tempo integral; fundeb; educação e equidade; educação profissional e tecnológica; ensino técnico profissionalizante; FNDE; gestão educacional; diretores escolares; magistério; ensino médio; adaptações de escolas; educação ambiental; plano nacional de educação; PDDE; programa pé de meia; INEP; conselho nacional de educação; VAAT; VAAR; secretaria estadual de educação; celular nas escolas; EAD
 REMS|Esportes|esporte; esporte e desenvolvimento social; esporte e educação; esporte e equidade; paradesporto; desenvolvimento social; esporte educacional; plano nacional de esporte; lei de incentivo ao esporte; sistema nacional de esporte; conselho nacional de esporte; esporte e saúde; esporte para toda a vida; esporte amador
 FMCSV|Primeira infância|criança; criança feliz; alfabetização; creche; conanda; maternidade; parentalidade; paternidade; primeira infância; infantil; infância; infanto-juvenil; fundeb; educação básica; plano nacional de educação; homeschooling; FNDE; vaar; vaat; educação infantil; pré-escola; materno-infantil; infraestrutura escolar; política nacional de cuidados; bolsa família; visitação domiciliar
 IEPS|Saúde|sus; sistema único de saúde; equidade em saúde; atenção primária à saúde; vigilância epidemiológica; planos de saúde; caps; seguros de saúde; populações vulneráveis; desigualdades sociais; organização do sus; políticas públicas em saúde; governança do sus; regionalização em saúde; população negra em saúde; saúde indígena; povos originários; saúde da pessoa idosa; envelhecimento ativo; atenção primária; saúde da criança; saúde do adolescente; saúde da mulher; saúde do homem; saúde da pessoa com deficiência; saúde da população lgbtqia+; financiamento da saúde; emendas e orçamento da saúde; emendas parlamentares; ministério da saúde; trabalhadores e profissionais de saúde; força de trabalho em saúde; política de recursos humanos em saúde; formação profissional de saúde; cuidados primários em saúde; emergências climáticas e ambientais em saúde; emergências climáticas; mudanças ambientais; adaptação climática; saúde ambiental; políticas climáticas; vigilância em saúde; epidemiológica; emergência em saúde; estado de emergência; saúde suplementar; seguradoras; planos populares; anvisa; ans; sandbox regulatório; cartões e administradoras de benefícios em saúde; economia solidária em saúde mental; pessoa em situação de rua; saúde mental; fiscalização de comunidades terapêuticas; rede de atenção psicossocial; raps; unidades de acolhimento; assistência multiprofissional; centros de convivência; cannabis; canabidiol; tratamento terapêutico; desinstitucionalização; manicômios; hospitais de custódia; saúde mental na infância; adolescência; escolas; comunidades escolares; protagonismo juvenil; dependência química; vícios; ludopatia; capacitação em saúde mental; intervenções terapêuticas em saúde mental; internet e redes sociais na saúde mental; violência psicológica; surto psicótico
@@ -669,8 +812,11 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
 
         if not link:
             continue
-        # Na Seção 3, termos que antes eram excluídos (como "chamamento
-        # público") passam a ser justamente parte do filtro de relevância.
+        # Mesma regra do monitor geral: licitação/contrato, processo
+        # individual e temas fora de escopo saem em qualquer seção.
+        if _is_fora_de_escopo(titulo + " " + resumo):
+            continue
+
         if not eh_secao_3 and _is_blocked(titulo + " " + resumo):
             continue
 
@@ -683,6 +829,10 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
 
         # Busca as keywords do cliente no conteúdo COMPLETO (título + resumo + corpo).
         conteudo_pagina = _baixar_conteudo_pagina(link) if r.get("urlTitle") else ""
+
+        if _is_fora_de_escopo(f"{titulo}\n{resumo}\n{conteudo_pagina or ''}", apenas_ato=True):
+            continue
+
         texto_norm = _normalize_ws(f"{titulo} {resumo} {conteudo_pagina or ''}")
 
         hits = []
