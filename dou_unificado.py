@@ -123,7 +123,7 @@ EXCLUDE_PATTERNS = [
 # Aqui ficam os cabecalhos que dizem o tipo do ato: valem no titulo+resumo e
 # tambem no corpo da pagina, porque cada pagina do DOU e um ato so.
 _LICITACAO_ATO_PATTERNS = [
-    re.compile(r"\b(aviso|avisos) de licitacao\b"),
+    re.compile(r"\b(aviso|avisos) de licitac(ao|oes)\b"),
     re.compile(r"\b(aviso|avisos) de (pregao|concorrencia|dispensa|inexigibilidade|contratacao direta)\b"),
     re.compile(r"\b(edital|editais) (de )?licitac(ao|oes)\b"),
     re.compile(r"\bpregao (eletronico|presencial)\b"),
@@ -131,12 +131,18 @@ _LICITACAO_ATO_PATTERNS = [
     re.compile(r"\b(ata|atas) de (registro|registros) de precos?\b"),
     # editais de notificacao e de intimacao
     re.compile(r"\b(edital|editais) de (notificacao|notificacoes|intimacao|intimacoes)\b"),
-    # credenciamento so sai quando e aviso; chamamento publico continua entrando
-    re.compile(r"\b(aviso|avisos) de credenciamento\b"),
-    # extratos de contrato e de termo aditivo
-    re.compile(r"\bextrato de (contrato|contratos|termo aditivo|termos aditivos|convenio)\b"),
-    re.compile(r"\bextrato\b.{0,80}\b(contrato|termo aditivo|convenio)\b"),
+    # extratos de contrato e de termo aditivo, no singular e no plural
+    re.compile(r"\bextratos? de (contratos?|termos? aditivos?|convenios?|apostilamentos?)\b"),
+    re.compile(r"\bextratos?\b.{0,80}\b(contratos?|termos? aditivos?|convenios?)\b"),
 ]
+
+# Credenciamento sai quando a publicacao e o aviso, inclusive quando vem
+# embrulhado em chamada publica. Checado antes da excecao do chamamento.
+_CREDENCIAMENTO_REGEX = re.compile(
+    r"\b(aviso|avisos) de credenciamento\b"
+    r"|\bchamada publica\b.{0,40}\bcredenciamento\b"
+    r"|\bcredenciamento\b.{0,40}\bchamada publica\b"
+)
 
 # Termos que sozinhos indicam licitacao no titulo+resumo, mas que no corpo da
 # pagina podem ser so citacao (a Lei de Licitacoes aparece em ato normativo).
@@ -164,6 +170,16 @@ _LICITACAO_TERMO_PATTERNS = [
 _CHAMAMENTO_PATTERNS = [
     _wholeword_pattern("Chamamento Público"),
     _wholeword_pattern("Chamamentos Públicos"),
+    # o DOU publica chamamento do PNAE sob cabecalho de licitacao e as vezes
+    # sem a palavra "publico"
+    re.compile(r"\b(aviso|avisos|edital|editais) de chamamento\b"),
+]
+
+# Chamada pública é mais fraca: a mesma expressão aparece em aviso de
+# credenciamento, que sai. Só segura a publicação quando não é credenciamento.
+_CHAMADA_PUBLICA_PATTERNS = [
+    re.compile(r"\b(aviso|avisos|edital|editais) de chamada publica\b"),
+    re.compile(r"\bchamada publica\b.{0,80}\bagricultura familiar\b"),
 ]
 
 # Publicacao de processo individual: ato que decide um caso especifico
@@ -177,7 +193,6 @@ _ATO_INDIVIDUAL_PATTERNS = [
     re.compile(r"\bextincao d[ae] (autorizacao|outorga|permissao|concessao)\b"),
     re.compile(r"\b(autorizacao|outorga) outorgada a\b"),
     re.compile(r"\barquivamento do processo\b"),
-    re.compile(r"\bcpf n\b"),
 ]
 
 # Temas que o monitoramento nao acompanha. Valem em todas as secoes, mas so no
@@ -388,8 +403,14 @@ def _has_any(text_norm: str, patterns) -> bool:
 
 
 def _is_licitacao_irrelevante(nt: str, apenas_ato: bool = False) -> bool:
-    # Edital de chamamento público é a exceção: continua entrando.
+    # Chamamento público é a exceção e continua entrando, inclusive quando o
+    # chamamento é feito por credenciamento (caso comum no PNAE).
     if _has_any(nt, _CHAMAMENTO_PATTERNS):
+        return False
+    # Fora daí, aviso de credenciamento sai mesmo vestido de chamada pública.
+    if _CREDENCIAMENTO_REGEX.search(nt):
+        return True
+    if _has_any(nt, _CHAMADA_PUBLICA_PATTERNS):
         return False
     if _has_any(nt, _LICITACAO_ATO_PATTERNS):
         return True
