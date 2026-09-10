@@ -445,6 +445,12 @@ def _is_fora_de_escopo(text: str, apenas_ato: bool = False) -> bool:
     return not apenas_ato and _has_any(nt, _TEMAS_FORA_PATTERNS)
 
 
+# Despacho do ministro que homologa parecer do Conselho Pleno ou da Camara de
+# Educacao Basica do CNE e norma geral, nao decisao de caso. O da Camara de
+# Educacao Superior (credenciamento de IES) continua barrado pela regra CNE+CES.
+_HOMOLOGA_PARECER_CNE_REGEX = re.compile(r"\bhomologo\b.{0,40}\bparecer cne (cp|ceb)\b")
+
+
 def _is_blocked(text: str) -> bool:
     if not text:
         return False
@@ -462,7 +468,7 @@ def _is_blocked(text: str) -> bool:
     if _has_any(nt, _CNE_PATTERNS) and _has_any(nt, _CES_PATTERNS):
         return True
 
-    if _DECISAO_CASE_REGEX.search(nt):
+    if _DECISAO_CASE_REGEX.search(nt) and not _HOMOLOGA_PARECER_CNE_REGEX.search(nt):
         return True
 
     for pat in _PROF_RH_PATTERNS:
