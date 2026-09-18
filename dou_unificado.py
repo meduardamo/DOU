@@ -1277,7 +1277,7 @@ def _build_html_email_geral(
 
     by_kw: dict[str, list[dict]] = {}
     for it in inserted_geral:
-        kw = (it.get("keyword") or "—").strip() or "—"
+        kw = (it.get("keyword") or "-").strip() or "-"
         by_kw.setdefault(kw, []).append(it)
 
     blocks = []
@@ -1319,13 +1319,13 @@ def _build_html_email_geral(
         f"<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;'>{html.escape(k)}</td>"
         f"<td style='padding:6px 10px; border-top:1px solid #e5e7eb; text-align:right;'>{v}</td></tr>"
         for k, v in top_kw
-    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>—</td></tr>"
+    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>-</td></tr>"
 
     top_sec_html = "".join(
         f"<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;'>{html.escape(k)}</td>"
         f"<td style='padding:6px 10px; border-top:1px solid #e5e7eb; text-align:right;'>{v}</td></tr>"
         for k, v in top_sec
-    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>—</td></tr>"
+    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>-</td></tr>"
 
     return f"""
     <html>
@@ -1399,8 +1399,8 @@ def _build_html_email_clientes(
             sec = (it.get("secao") or "").strip()
             if sec:
                 sec_counts[sec] += 1
-        top_kws = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3)) or "—"
-        top_secs = ", ".join(f"{k} ({n})" for k, n in sec_counts.most_common(3)) or "—"
+        top_kws = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3)) or "-"
+        top_secs = ", ".join(f"{k} ({n})" for k, n in sec_counts.most_common(3)) or "-"
         sum_rows.append((cliente, len(items), top_kws, top_secs))
     sum_rows.sort(key=lambda t: t[1], reverse=True)
 
@@ -1437,7 +1437,7 @@ def _build_html_email_clientes(
 
         grouped: dict[str, list[dict]] = {}
         for it in items:
-            k = (it.get("keyword") or "").strip() or "—"
+            k = (it.get("keyword") or "").strip() or "-"
             grouped.setdefault(k, []).append(it)
 
         blocks = []
@@ -1552,7 +1552,7 @@ def envia_emails_edicao(
             inserted_geral=inserted_geral,
             planilha_id=planilha_id,
             planilha_gid=planilha_gid,
-            titulo=f"DOU — {edicao_label} — Geral",
+            titulo=f"DOU - {edicao_label} - Geral",
             subtitulo=subtitulo,
         )
         subj_geral = f"{subject_prefix} | Geral: {len(inserted_geral)}"
@@ -1565,7 +1565,7 @@ def envia_emails_edicao(
         html_cli = _build_html_email_clientes(
             inserted_clientes=inserted_clientes,
             planilha_clientes_id=planilha_clientes_id,
-            titulo=f"DOU — {edicao_label} — Clientes",
+            titulo=f"DOU - {edicao_label} - Clientes",
             subtitulo=subtitulo,
         )
         total_cli = sum(len(v) for v in inserted_clientes.values())
@@ -1591,13 +1591,13 @@ def executar_regular(data: str | None = None):
     hoje = data or now_br().strftime("%d-%m-%Y")
     envia_emails_edicao(
         edicao_label="Edição Regular",
-        subtitulo=f"Edição Regular — {hoje}",
+        subtitulo=f"Edição Regular - {hoje}",
         inserted_geral=ins_g,
         inserted_clientes=ins_c,
         planilha_id=os.getenv("PLANILHA", ""),
         planilha_gid=_ws_gid(ws_geral) if ws_geral else None,
         planilha_clientes_id=os.getenv("PLANILHA_CLIENTES", ""),
-        subject_prefix=f"DOU Regular — {hoje}",
+        subject_prefix=f"DOU Regular - {hoje}",
     )
 
 
@@ -1614,13 +1614,13 @@ def executar_extra(data: str | None = None):
     hora = now_br().strftime("%H:%M")
     envia_emails_edicao(
         edicao_label="Edição Extra",
-        subtitulo=f"Edição Extra — {data_label} {hora}",
+        subtitulo=f"Edição Extra - {data_label} {hora}",
         inserted_geral=ins_g,
         inserted_clientes=ins_c,
         planilha_id=os.getenv("PLANILHA", ""),
         planilha_gid=_ws_gid(ws_geral) if ws_geral else None,
         planilha_clientes_id=os.getenv("PLANILHA_CLIENTES", ""),
-        subject_prefix=f"DOU Extra — {data_label} {hora}",
+        subject_prefix=f"DOU Extra - {data_label} {hora}",
     )
 
 
