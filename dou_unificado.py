@@ -1536,6 +1536,9 @@ def _send_email(subject: str, html_body: str, recipients: list[str]) -> None:
             print(f"❌ Falha ao enviar para {dest}: {e}")
 
 
+ENVIAR_EMAIL_GERAL = False
+
+
 def envia_emails_edicao(
     edicao_label: str,
     subtitulo: str,
@@ -1546,8 +1549,10 @@ def envia_emails_edicao(
     planilha_clientes_id: str,
     subject_prefix: str,
 ) -> None:
+    # Email geral desligado em 20/10/2026 (decisão dela): só o de clientes sai.
+    # As linhas gerais continuam gravadas na planilha. Para religar, True.
     rec_geral = _pick_recipients("DESTINATARIOS_GERAL")
-    if inserted_geral:
+    if ENVIAR_EMAIL_GERAL and inserted_geral:
         html_geral = _build_html_email_geral(
             inserted_geral=inserted_geral,
             planilha_id=planilha_id,
@@ -1557,6 +1562,8 @@ def envia_emails_edicao(
         )
         subj_geral = f"{subject_prefix} | Geral: {len(inserted_geral)}"
         _send_email(subj_geral, html_geral, rec_geral)
+    elif not ENVIAR_EMAIL_GERAL:
+        print("Email geral desligado — não envia.")
     else:
         print("Nada novo (geral) — não envia e-mail geral.")
 
