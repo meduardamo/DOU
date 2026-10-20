@@ -1,0 +1,28 @@
+name: DOU Email de exemplo
+
+# Manda o email DOU Clientes da última data gravada para um endereço só.
+# Não raspa nem grava; serve para conferir o layout.
+on:
+  workflow_dispatch:
+    inputs:
+      para:
+        description: "Endereço que recebe o exemplo"
+        required: true
+        default: "mariaeduarda.marques@eixoestrategia.com"
+
+jobs:
+  exemplo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
+          EMAIL: ${{ secrets.EMAIL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          PARA: ${{ github.event.inputs.para }}
+        run: python email_exemplo.py "$PARA"
