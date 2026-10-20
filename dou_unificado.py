@@ -1245,12 +1245,48 @@ def _truncate(s: str, n: int = 260) -> str:
     return s[: n - 1].rstrip() + "…"
 
 
+# Palavras que ficam em minúscula no título; o resto, se curto, é sigla (MEC, FNDE, CNE/CP).
+_MINUSC = set("""a o as os e de da do das dos em na no nas nos para por com sem ao aos à às
+um uma que se sua seu nº n° º ato atos aviso avisos edital editais lei leis extrato extratos
+despacho despachos portaria portarias resolução resoluções decreto decretos retificação
+instrução normativa conjunta deliberação acórdão parecer termo contrato pregão
+janeiro fevereiro março abril maio junho julho agosto setembro outubro novembro dezembro""".split())
+
+
+def _titulo_dou(t: str) -> str:
+    """DOU publica título em caixa alta; no email sai em caixa normal, siglas mantidas."""
+    t = (t or "").strip()
+    letras = re.sub(r"[^A-Za-zÀ-ÖØ-Þà-öø-ÿ]", "", t)  # "Nº" tem º minúsculo
+    if not letras or not letras.isupper():
+        return t
+    out = []
+    for i, w in enumerate(t.split()):
+        nucleo = re.sub(r"[^\wÀ-ÿ/]", "", w)
+        low = w.lower()
+        if "/" not in nucleo and (nucleo.lower() in _MINUSC or len(re.sub(r"[^A-Za-zÀ-ÿ]", "", nucleo)) > 6):
+            out.append(low)
+        else:
+            out.append(w)  # sigla (CNE/CP, FNDE) ou número
+    if out:
+        out[0] = out[0][:1].upper() + out[0][1:]
+    return " ".join(out)
+
+
+def _resumo_dou(titulo: str, resumo: str) -> str:
+    """O resumo do DOU começa repetindo o título; corta a repetição."""
+    r = (resumo or "").strip()
+    t = (titulo or "").strip()
+    if t and r.upper().startswith(t.upper()):
+        r = r[len(t):].lstrip(" .,:;-")
+    return r
+
+
 def _itens_dou(items: list[dict], limite: int) -> str:
     import email_layout as L
     linhas = "".join(
-        L.item(it.get("title") or "(sem título)", href=it.get("href") or "",
+        L.item(_titulo_dou(it.get("title") or "(sem título)"), href=it.get("href") or "",
                meta=(it.get("secao") or "").strip(),
-               texto=_truncate(it.get("abstract") or "", 280), acao="Abrir no DOU")
+               texto=_truncate(_resumo_dou(it.get("title"), it.get("abstract")), 280))
         for it in items[:limite])
     if len(items) > limite:
         linhas += (f'<tr><td style="padding:14px 40px;font:500 12px/1.5 {L.FONTE};color:{L.CINZA}">'

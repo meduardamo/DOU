@@ -32,22 +32,9 @@ def esc(v) -> str:
 
 
 def numeros(pares) -> str:
-    """Linha de números do topo: [(valor, rótulo), ...]. Zero e vazio saem."""
-    celulas = "".join(
-        f'<td style="padding:0 28px 0 0;vertical-align:top">'
-        f'<div style="font:700 26px/1 {FONTE};color:{MARINHO}">{esc(v)}</div>'
-        f'<div style="font:600 10px/1.4 {FONTE};color:{CINZA};letter-spacing:1px;'
-        f'text-transform:uppercase;padding-top:6px">{esc(r)}</div></td>'
-        for v, r in pares if v not in (None, "", 0, "0")
-    )
-    if not celulas:
-        return ""
-    # Mesmo card dos itens, para os números lerem como bloco e não como texto solto.
-    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            f'style="margin:22px 0 0;border:1px solid {FILETE};border-radius:8px;background:#ffffff">'
-            f'<tr><td style="padding:18px 20px 16px">'
-            f'<table role="presentation" cellpadding="0" cellspacing="0"><tr>{celulas}</tr></table>'
-            f'</td></tr></table>')
+    """Números do topo como texto corrido: "259 atos novos · 13 clientes". Zero e vazio saem."""
+    return " · ".join(f"{esc(v)} {esc(r)}" for v, r in pares
+                      if v not in (None, "", 0, "0"))
 
 
 def _ancora(titulo) -> str:
@@ -65,8 +52,8 @@ def secao(titulo, qtd=None) -> str:
     return (f'<!--secao:{marca}|{"" if qtd is None else qtd}-->'
             f'<tr><td id="{_ancora(titulo)}" style="padding:40px 40px 0">'
             f'<a name="{_ancora(titulo)}"></a>'
-            f'<div style="height:3px;width:32px;background:{VINHO};font-size:0;line-height:0">&nbsp;</div>'
-            f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:10px 0 8px">'
+            f'<div style="height:1px;background:{FILETE};font-size:0;line-height:0">&nbsp;</div>'
+            f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:16px 0 4px">'
             f'{esc(titulo)}{conta}</div></td></tr>')
 
 
@@ -97,31 +84,28 @@ def subsecao(titulo) -> str:
 
 
 def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> str:
-    """Um item da lista. Texto já escapado entra em `extra` (HTML pronto)."""
+    """Um item da lista. Texto já escapado entra em `extra` (HTML pronto).
+
+    `acao` fica na assinatura por compatibilidade e não aparece: o título já é o link."""
     tit = esc(titulo)
+    cor = TINTA
     if href and href.startswith("http"):
-        tit = (f'<a href="{esc(href)}" style="color:{TINTA};text-decoration:none">{tit}</a>')
+        cor = MARINHO
+        tit = (f'<a href="{esc(href)}" style="color:{MARINHO};text-decoration:none">{tit}</a>')
     partes = []
     if rotulo:
-        # Rótulo do item em caixa normal e vinho: não compete com a subseção em caixa alta.
         partes.append(f'<div style="font:600 12px/1.4 {FONTE};color:{VINHO};padding-bottom:4px">'
                       f'{esc(rotulo)}</div>')
-    partes.append(f'<div style="font:700 16px/1.35 {FONTE};color:{TINTA}">{tit}</div>')
+    partes.append(f'<div style="font:700 15px/1.4 {FONTE};color:{cor}">{tit}</div>')
     if meta:
-        partes.append(f'<div style="font:500 12px/1.5 {FONTE};color:{CINZA};padding-top:4px">{esc(meta)}</div>')
+        partes.append(f'<div style="font:500 12px/1.5 {FONTE};color:{CINZA};padding-top:3px">{esc(meta)}</div>')
     if texto:
-        partes.append(f'<div style="font:400 14px/1.6 {FONTE};color:{TINTA};padding-top:8px">{esc(texto)}</div>')
+        partes.append(f'<div style="font:400 14px/1.6 {FONTE};color:{TINTA};padding-top:6px">{esc(texto)}</div>')
     if extra:
         partes.append(extra)
-    if acao and href and href.startswith("http"):
-        partes.append(f'<div style="padding-top:8px"><a href="{esc(href)}" style="font:600 12px/1 {FONTE};'
-                      f'color:{MARINHO};text-decoration:underline">{esc(acao)}</a></div>')
-    # Card: filete fino e canto leve. Sem barra colorida na lateral; a cor
-    # fica para o rótulo e o link, que já dizem o que é cada coisa.
-    return (f'<tr><td style="padding:6px 40px">'
-            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            f'style="border:1px solid {FILETE};border-radius:8px;background:#ffffff">'
-            f'<tr><td style="padding:16px 20px">{"".join(partes)}</td></tr></table></td></tr>')
+    # Lista corrida: fio fino embaixo de cada item, sem caixa.
+    return (f'<tr><td style="padding:0 40px"><div style="padding:16px 0;border-bottom:1px solid {FILETE}">'
+            f'{"".join(partes)}</div></td></tr>')
 
 
 def nota(html_pronto) -> str:
@@ -131,9 +115,8 @@ def nota(html_pronto) -> str:
 
 
 def botao(texto, href) -> str:
-    return (f'<a href="{esc(href)}" style="display:inline-block;background:{MARINHO};color:#ffffff;'
-            f'font:700 12px/1 {FONTE};letter-spacing:.5px;text-decoration:none;padding:12px 18px;'
-            f'margin:0 8px 8px 0">{esc(texto)}</a>')
+    return (f'<a href="{esc(href)}" style="font:600 13px/1.4 {FONTE};color:{MARINHO};'
+            f'text-decoration:underline;margin-right:20px">{esc(texto)}</a>')
 
 
 def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
@@ -142,7 +125,9 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
     bts = "".join(botao(t, u) for t, u in botoes if u and u.startswith("http"))
     # A faixa diz de que rotina é o email; se repete o título, fica só a marca.
     kicker = "" if kicker.strip().lower() == titulo.strip().lower() else kicker
-    bts_html = f'<tr><td style="padding:28px 40px 8px">{bts}</td></tr>' if bts else ""
+    nums_txt = numeros(nums)
+    linha_data = esc(data) + (f" · {nums_txt}" if nums_txt else "")
+    bts_html = f'<div style="padding-top:14px">{bts}</div>' if bts else ""
     rod = f'<div style="padding-bottom:8px">{rodape}</div>' if rodape else ""
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
@@ -162,11 +147,10 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
   </tr></table></td></tr>
 <tr><td style="height:4px;background:{VINHO};font-size:0;line-height:0">&nbsp;</td></tr>
 <tr><td style="padding:34px 40px 0">
-  <div style="font:600 12px/1.4 {FONTE};color:{CINZA}">{esc(data)}</div>
+  <div style="font:600 12px/1.4 {FONTE};color:{CINZA}">{linha_data}</div>
   <div style="font:700 28px/1.2 {FONTE};color:{MARINHO};padding-top:6px">{esc(titulo)}</div>
-  {numeros(nums)}
+  {bts_html}
 </td></tr>
-{bts_html}
 {sumario(corpo_linhas)}
 {corpo_linhas}
 <tr><td style="padding:32px 40px 36px;font:400 11px/1.6 {FONTE};color:{CINZA}">
