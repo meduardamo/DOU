@@ -1238,22 +1238,24 @@ def _unique_hrefs(*inserted_lists) -> int:
     return len(hrefs)
 
 
-def _badge(text: str) -> str:
-    t = html.escape(text or "")
-    if not t:
-        return ""
-    return (
-        f"<span style='display:inline-block; font-size:12px; padding:2px 8px; "
-        f"border-radius:999px; border:1px solid #e5e7eb; background:#f9fafb; "
-        f"color:#111; margin-left:8px;'>{t}</span>"
-    )
-
-
 def _truncate(s: str, n: int = 260) -> str:
     s = (s or "").strip()
     if len(s) <= n:
         return s
     return s[: n - 1].rstrip() + "…"
+
+
+def _itens_dou(items: list[dict], limite: int) -> str:
+    import email_layout as L
+    linhas = "".join(
+        L.item(it.get("title") or "(sem título)", href=it.get("href") or "",
+               rotulo=(it.get("secao") or "").strip(),
+               texto=_truncate(it.get("abstract") or "", 280), acao="Abrir no DOU")
+        for it in items[:limite])
+    if len(items) > limite:
+        linhas += (f'<tr><td style="padding:14px 40px;font:500 12px/1.5 {L.FONTE};color:{L.CINZA}">'
+                   f'Mais {len(items) - limite} na planilha.</td></tr>')
+    return linhas
 
 
 def _build_html_email_geral(
@@ -1263,114 +1265,29 @@ def _build_html_email_geral(
     titulo: str,
     subtitulo: str,
 ) -> str:
+    import email_layout as L
     if not inserted_geral:
         return ""
-
-    total = len(inserted_geral)
-    geral_url = _gs_tab_url(planilha_id, planilha_gid)
-
-    kw_counts = Counter((it.get("keyword") or "").strip() for it in inserted_geral if (it.get("keyword") or "").strip())
-    sec_counts = Counter((it.get("secao") or "").strip() for it in inserted_geral if (it.get("secao") or "").strip())
-
-    top_kw = kw_counts.most_common(8)
-    top_sec = sec_counts.most_common(6)
 
     by_kw: dict[str, list[dict]] = {}
     for it in inserted_geral:
         kw = (it.get("keyword") or "-").strip() or "-"
         by_kw.setdefault(kw, []).append(it)
 
-    blocks = []
+    corpo = ""
     for kw, items in sorted(by_kw.items(), key=lambda kv: len(kv[1]), reverse=True):
         items_sorted = sorted(items, key=lambda x: (x.get("secao") or "", x.get("title") or ""))
-        li = []
-        for it in items_sorted[:25]:
-            title = html.escape(it.get("title") or "(sem título)")
-            href = html.escape(it.get("href") or "#")
-            sec = (it.get("secao") or "").strip()
-            abs_ = _truncate(it.get("abstract") or "", 260)
-            li.append(
-                "<li style='margin:0 0 10px 0;'>"
-                + f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
-                + f"{_badge(sec)}"
-                + (f"<div style='margin-top:4px; color:#374151; font-size:13px;'>{html.escape(abs_)}</div>" if abs_ else "")
-                + "</li>"
-            )
-        more = ""
-        if len(items_sorted) > 25:
-            more = f"<div style='margin-top:6px; color:#6b7280; font-size:12px;'>+{len(items_sorted)-25} itens (ver planilha)</div>"
+        corpo += L.secao(kw, len(items_sorted)) + _itens_dou(items_sorted, 25)
 
-        blocks.append(
-            f"""
-            <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-top:12px;">
-              <div style="font-size:16px; margin-bottom:8px;">
-                <b>{html.escape(kw)}</b>
-                <span style="color:#6b7280; font-size:12px; margin-left:6px;">({len(items_sorted)})</span>
-              </div>
-              <ul style="margin:0; padding-left:18px;">
-                {''.join(li)}
-              </ul>
-              {more}
-            </div>
-            """
-        )
-
-    top_kw_html = "".join(
-        f"<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;'>{html.escape(k)}</td>"
-        f"<td style='padding:6px 10px; border-top:1px solid #e5e7eb; text-align:right;'>{v}</td></tr>"
-        for k, v in top_kw
-    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>-</td></tr>"
-
-    top_sec_html = "".join(
-        f"<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;'>{html.escape(k)}</td>"
-        f"<td style='padding:6px 10px; border-top:1px solid #e5e7eb; text-align:right;'>{v}</td></tr>"
-        for k, v in top_sec
-    ) or "<tr><td style='padding:6px 10px; border-top:1px solid #e5e7eb;' colspan='2'>-</td></tr>"
-
-    return f"""
-    <html>
-      <body style="font-family: Arial, Helvetica, sans-serif; color:#111; line-height:1.35;">
-        <div style="max-width:900px;">
-          <h2 style="margin:0 0 6px 0;">{html.escape(titulo)}</h2>
-          <div style="margin:0 0 14px 0; color:#374151;">{html.escape(subtitulo)}</div>
-
-          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:12px;">
-            <div style="font-size:14px;">Itens novos (geral): <b>{total}</b></div>
-            <div style="margin-top:10px;">
-              <a href="{html.escape(geral_url)}" target="_blank"
-                 style="display:inline-block; padding:8px 10px; border:1px solid #111;
-                        border-radius:10px; text-decoration:none; color:#111;">
-                 Abrir planilha (geral)
-              </a>
-            </div>
-          </div>
-
-          <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
-            <div style="flex:1; min-width:280px; padding:12px; border:1px solid #e5e7eb; border-radius:12px;">
-              <div style="font-weight:bold; margin-bottom:6px;">Top palavras-chave</div>
-              <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                <tr><th style="text-align:left; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Keyword</th>
-                    <th style="text-align:right; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Qtd</th></tr>
-                {top_kw_html}
-              </table>
-            </div>
-
-            <div style="flex:1; min-width:280px; padding:12px; border:1px solid #e5e7eb; border-radius:12px;">
-              <div style="font-weight:bold; margin-bottom:6px;">Distribuição por seção</div>
-              <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                <tr><th style="text-align:left; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Seção</th>
-                    <th style="text-align:right; padding:6px 10px; border-bottom:1px solid #e5e7eb;">Qtd</th></tr>
-                {top_sec_html}
-              </table>
-            </div>
-          </div>
-
-          <div style="margin-top:8px; color:#111; font-weight:bold;">Detalhamento (geral)</div>
-          {''.join(blocks)}
-        </div>
-      </body>
-    </html>
-    """
+    secoes = Counter((it.get("secao") or "").strip() for it in inserted_geral)
+    return L.pagina(
+        "DOU · Geral", titulo, subtitulo, corpo,
+        nums=[(len(inserted_geral), "atos novos"), (len(by_kw), "palavras-chave"),
+              (len([s for s in secoes if s]), "seções")],
+        previa=" · ".join(f"{k} ({len(v)})" for k, v in
+                          sorted(by_kw.items(), key=lambda kv: len(kv[1]), reverse=True)[:4]),
+        botoes=[("Abrir a planilha", _gs_tab_url(planilha_id, planilha_gid))],
+    )
 
 
 def _build_html_email_clientes(
@@ -1379,141 +1296,33 @@ def _build_html_email_clientes(
     titulo: str,
     subtitulo: str,
 ) -> str:
+    import email_layout as L
     if not inserted_clientes or all(not v for v in inserted_clientes.values()):
         return ""
 
     total = sum(len(v) for v in inserted_clientes.values())
-    clientes_url = _gs_tab_url(planilha_clientes_id, None)
+    clientes = sorted(((c, v) for c, v in inserted_clientes.items() if v),
+                      key=lambda kv: len(kv[1]), reverse=True)
 
-    sum_rows = []
-    for cliente, items in inserted_clientes.items():
-        if not items:
-            continue
-        kw_counts = Counter()
-        sec_counts = Counter()
-        for it in items:
-            kws_join = (it.get("keyword") or "").strip()
-            if kws_join:
-                for part in [p.strip() for p in kws_join.split(";") if p.strip()]:
-                    kw_counts[part] += 1
-            sec = (it.get("secao") or "").strip()
-            if sec:
-                sec_counts[sec] += 1
-        top_kws = ", ".join(f"{k} ({n})" for k, n in kw_counts.most_common(3)) or "-"
-        top_secs = ", ".join(f"{k} ({n})" for k, n in sec_counts.most_common(3)) or "-"
-        sum_rows.append((cliente, len(items), top_kws, top_secs))
-    sum_rows.sort(key=lambda t: t[1], reverse=True)
-
-    def _slug(s: str) -> str:
-        return re.sub(r"[^a-z0-9]+", "-", _normalize_ws(s)).strip("-") or "cliente"
-
-    sum_html = []
-    sum_html.append(
-        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
-        "<tr>"
-        "<th style='text-align:left; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Cliente</th>"
-        "<th style='text-align:right; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Qtd</th>"
-        "<th style='text-align:left; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Top keywords</th>"
-        "<th style='text-align:left; padding:8px 10px; border-bottom:1px solid #e5e7eb;'>Top seções</th>"
-        "</tr>"
-    )
-    for cliente, qtd, top_kws, top_secs in sum_rows:
-        anchor = _slug(cliente)
-        sum_html.append(
-            "<tr>"
-            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'><a href='#{anchor}' style='color:#111; text-decoration:none;'><b>{html.escape(cliente)}</b></a></td>"
-            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb; text-align:right;'><b>{qtd}</b></td>"
-            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_kws)}</td>"
-            + f"<td style='padding:8px 10px; border-top:1px solid #e5e7eb;'>{html.escape(top_secs)}</td>"
-            + "</tr>"
-        )
-    sum_html.append("</table>")
-
-    details = []
-    for cliente, items in sorted(inserted_clientes.items(), key=lambda kv: len(kv[1]), reverse=True):
-        if not items:
-            continue
-        anchor = _slug(cliente)
-
+    corpo = ""
+    for cliente, items in clientes:
+        corpo += L.secao(cliente, len(items))
         grouped: dict[str, list[dict]] = {}
         for it in items:
             k = (it.get("keyword") or "").strip() or "-"
             grouped.setdefault(k, []).append(it)
-
-        blocks = []
         for kws_join, its in sorted(grouped.items(), key=lambda kv: len(kv[1]), reverse=True):
             its_sorted = sorted(its, key=lambda x: ((x.get("secao") or ""), (x.get("title") or "")))
-            li = []
-            for it in its_sorted[:30]:
-                title = html.escape(it.get("title") or "(sem título)")
-                href = html.escape(it.get("href") or "#")
-                sec = (it.get("secao") or "").strip()
-                abs_ = _truncate(it.get("abstract") or "", 280)
-                li.append(
-                    "<li style='margin:0 0 10px 0;'>"
-                    + f"<a href='{href}' target='_blank' style='color:#111; text-decoration:none;'><b>{title}</b></a>"
-                    + f"{_badge(sec)}"
-                    + (f"<div style='margin-top:4px; color:#374151; font-size:13px;'>{html.escape(abs_)}</div>" if abs_ else "")
-                    + "</li>"
-                )
-            more = ""
-            if len(its_sorted) > 30:
-                more = f"<div style='margin-top:6px; color:#6b7280; font-size:12px;'>+{len(its_sorted)-30} itens (ver planilha)</div>"
+            if kws_join != "-":
+                corpo += L.subsecao(" · ".join(k.strip() for k in kws_join.split(";") if k.strip()))
+            corpo += _itens_dou(its_sorted, 30)
 
-            blocks.append(
-                f"""
-                <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-top:10px;">
-                  <div style="font-size:13px; color:#111; margin-bottom:8px;">
-                    <b>Keywords acionadas:</b> <span style="color:#374151;">{html.escape(kws_join)}</span>
-                    <span style="color:#6b7280; font-size:12px; margin-left:8px;">({len(its_sorted)})</span>
-                  </div>
-                  <ul style="margin:0; padding-left:18px;">
-                    {''.join(li)}
-                  </ul>
-                  {more}
-                </div>
-                """
-            )
-
-        details.append(
-            f"""
-            <div style="padding:14px; border:1px solid #e5e7eb; border-radius:14px; margin-top:14px; background:#fff;">
-              <div id="{anchor}" style="font-size:18px; margin-bottom:6px;"><b>{html.escape(cliente)}</b></div>
-              <div style="color:#6b7280; font-size:13px; margin-bottom:10px;">Itens novos: <b>{len(items)}</b></div>
-              {''.join(blocks)}
-            </div>
-            """
-        )
-
-    return f"""
-    <html>
-      <body style="font-family: Arial, Helvetica, sans-serif; color:#111; line-height:1.35;">
-        <div style="max-width:920px;">
-          <h2 style="margin:0 0 6px 0;">{html.escape(titulo)}</h2>
-          <div style="margin:0 0 14px 0; color:#374151;">{html.escape(subtitulo)}</div>
-
-          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:12px;">
-            <div style="font-size:14px;">Itens novos (clientes): <b>{total}</b></div>
-            <div style="margin-top:10px;">
-              <a href="{html.escape(clientes_url)}" target="_blank"
-                 style="display:inline-block; padding:8px 10px; border:1px solid #111;
-                        border-radius:10px; text-decoration:none; color:#111;">
-                 Abrir planilha (clientes)
-              </a>
-            </div>
-          </div>
-
-          <div style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:12px;">
-            <div style="font-weight:bold; margin-bottom:8px;">Sumário por cliente</div>
-            {''.join(sum_html)}
-          </div>
-
-          <div style="margin-top:8px; color:#111; font-weight:bold;">Detalhamento (por cliente)</div>
-          {''.join(details)}
-        </div>
-      </body>
-    </html>
-    """
+    return L.pagina(
+        "DOU · Clientes", titulo, subtitulo, corpo,
+        nums=[(total, "atos novos"), (len(clientes), "clientes")],
+        previa=" · ".join(f"{c} ({len(v)})" for c, v in clientes[:5]),
+        botoes=[("Abrir a planilha de clientes", _gs_tab_url(planilha_clientes_id, None))],
+    )
 
 
 def _send_email(subject: str, html_body: str, recipients: list[str]) -> None:
@@ -1557,7 +1366,7 @@ def envia_emails_edicao(
             inserted_geral=inserted_geral,
             planilha_id=planilha_id,
             planilha_gid=planilha_gid,
-            titulo=f"DOU - {edicao_label} - Geral",
+            titulo=edicao_label,
             subtitulo=subtitulo,
         )
         subj_geral = f"{subject_prefix} | Geral: {len(inserted_geral)}"
@@ -1572,7 +1381,7 @@ def envia_emails_edicao(
         html_cli = _build_html_email_clientes(
             inserted_clientes=inserted_clientes,
             planilha_clientes_id=planilha_clientes_id,
-            titulo=f"DOU - {edicao_label} - Clientes",
+            titulo=edicao_label,
             subtitulo=subtitulo,
         )
         total_cli = sum(len(v) for v in inserted_clientes.values())
@@ -1598,7 +1407,7 @@ def executar_regular(data: str | None = None):
     hoje = data or now_br().strftime("%d-%m-%Y")
     envia_emails_edicao(
         edicao_label="Edição Regular",
-        subtitulo=f"Edição Regular - {hoje}",
+        subtitulo=hoje.replace("-", "/"),
         inserted_geral=ins_g,
         inserted_clientes=ins_c,
         planilha_id=os.getenv("PLANILHA", ""),
@@ -1621,7 +1430,7 @@ def executar_extra(data: str | None = None):
     hora = now_br().strftime("%H:%M")
     envia_emails_edicao(
         edicao_label="Edição Extra",
-        subtitulo=f"Edição Extra - {data_label} {hora}",
+        subtitulo=f"{data_label.replace('-', '/')}, {hora.replace(':', 'h')}",
         inserted_geral=ins_g,
         inserted_clientes=ins_c,
         planilha_id=os.getenv("PLANILHA", ""),
