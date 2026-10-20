@@ -1,7 +1,8 @@
 """Moldura comum dos emails da Eixo (aqui, os do DOU).
 
 Email não é página: Gmail corta <style>, flex e grid; Outlook só entende
-tabela. Por isso tudo aqui é tabela com estilo inline e largura fixa de 640px.
+tabela. Por isso tudo aqui é tabela com estilo inline, até 680px, alinhada à
+esquerda e sem fundo em volta, para ler como corpo do email e não como cartão.
 A fonte é Montserrat onde o cliente carrega (Apple Mail, iOS) e Arial no resto.
 
 Cópia do compartilhado/email_layout.py do eixo-eleicoes. Mudou aqui,
@@ -17,6 +18,9 @@ TINTA = "#1B1B1A"
 CINZA = "#6B6A65"
 FILETE = "#E1E0D9"
 FONTE = "'Montserrat',Arial,Helvetica,sans-serif"
+# Gmail só mostra imagem por URL pública; o arquivo mora no repo eixo-eleicoes.
+LOGO_URL = ("https://raw.githubusercontent.com/meduardamo/eixo-eleicoes/main/"
+            "assets/email/logo_eixogov_branca.png")
 
 
 def esc(v) -> str:
@@ -106,15 +110,14 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
 <meta name="color-scheme" content="light only">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>{esc(titulo)}</title></head>
-<body style="margin:0;padding:0;background:{GELO}">
+<body style="margin:0;padding:0;background:#ffffff">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">{esc(previa)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{GELO}">
-<tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="640" cellpadding="0" cellspacing="0"
-       style="width:100%;max-width:640px;background:#ffffff">
-<tr><td style="background:{MARINHO};padding:16px 40px">
+<table role="presentation" width="680" cellpadding="0" cellspacing="0"
+       style="width:100%;max-width:680px;background:#ffffff">
+<tr><td style="background:{MARINHO};padding:18px 40px">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-  <td style="font:700 15px/1 {FONTE};color:#ffffff;letter-spacing:4px">EIXO</td>
+  <td><img src="{LOGO_URL}" width="74" height="48" alt="EixoGov"
+           style="display:block;border:0;width:74px;height:48px"></td>
   <td align="right" style="font:600 10px/1 {FONTE};color:#C9CFDA;letter-spacing:1.5px;text-transform:uppercase">{esc(kicker)}</td>
   </tr></table></td></tr>
 <tr><td style="height:4px;background:{VINHO};font-size:0;line-height:0">&nbsp;</td></tr>
@@ -128,4 +131,4 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
 <tr><td style="padding:32px 40px 36px;font:400 11px/1.6 {FONTE};color:{CINZA}">
   {rod}Envio automático da Eixo
 </td></tr>
-</table></td></tr></table></body></html>"""
+</table></body></html>"""
