@@ -11,12 +11,14 @@ muda lá.
 
 import html as _html
 
+# Paleta igual à do manual da área (seção 5): planilha, documento e email usam os mesmos valores.
+
 MARINHO = "#192D4E"
 VINHO = "#962E4D"
 GELO = "#F4F3EF"
-TINTA = "#1B1B1A"
-CINZA = "#6B6A65"
-FILETE = "#E1E0D9"
+TINTA = "#202124"
+CINZA = "#6B6B6B"
+FILETE = "#DADAD4"
 FONTE = "'Montserrat',Arial,Helvetica,sans-serif"
 # Gmail só mostra imagem por URL pública; o arquivo mora no repo eixo-eleicoes.
 LOGO_URL = ("https://raw.githubusercontent.com/meduardamo/eixo-eleicoes/main/"
@@ -74,7 +76,7 @@ def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> st
     if meta:
         partes.append(f'<div style="font:500 12px/1.5 {FONTE};color:{CINZA};padding-top:4px">{esc(meta)}</div>')
     if texto:
-        partes.append(f'<div style="font:400 14px/1.6 {FONTE};color:#3A3936;padding-top:8px">{esc(texto)}</div>')
+        partes.append(f'<div style="font:400 14px/1.6 {FONTE};color:{TINTA};padding-top:8px">{esc(texto)}</div>')
     if extra:
         partes.append(extra)
     if acao and href and href.startswith("http"):
@@ -91,7 +93,7 @@ def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> st
 def nota(html_pronto) -> str:
     """Bloco de instrução para a equipe, discreto, antes da lista."""
     return (f'<tr><td style="padding:24px 40px 0"><div style="font:400 13px/1.6 {FONTE};'
-            f'color:#3A3936;background:{GELO};padding:14px 16px">{html_pronto}</div></td></tr>')
+            f'color:{TINTA};background:{GELO};padding:14px 16px">{html_pronto}</div></td></tr>')
 
 
 def botao(texto, href) -> str:
@@ -127,7 +129,7 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
 <tr><td style="height:4px;background:{VINHO};font-size:0;line-height:0">&nbsp;</td></tr>
 <tr><td style="padding:34px 40px 0">
   <div style="font:600 12px/1.4 {FONTE};color:{CINZA}">{esc(data)}</div>
-  <div style="font:700 28px/1.2 {FONTE};color:{TINTA};padding-top:6px">{esc(titulo)}</div>
+  <div style="font:700 28px/1.2 {FONTE};color:{MARINHO};padding-top:6px">{esc(titulo)}</div>
   {numeros(nums)}
 </td></tr>
 {bts_html}
