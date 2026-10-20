@@ -48,7 +48,7 @@ def secao(titulo, qtd=None) -> str:
              if qtd is not None else "")
     return (f'<tr><td style="padding:40px 40px 0">'
             f'<div style="height:3px;width:32px;background:{VINHO};font-size:0;line-height:0">&nbsp;</div>'
-            f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:10px 0 4px">'
+            f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:10px 0 8px">'
             f'{esc(titulo)}{conta}</div></td></tr>')
 
 
@@ -56,7 +56,7 @@ def subsecao(titulo) -> str:
     """Nível 3: agrupa itens dentro da seção (UF, palavra-chave, tipo)."""
     return (f'<tr><td style="padding:20px 40px 0">'
             f'<div style="font:700 11px/1.4 {FONTE};color:{CINZA};letter-spacing:1.2px;'
-            f'text-transform:uppercase;border-bottom:1px solid {FILETE};padding-bottom:6px">'
+            f'text-transform:uppercase;padding-bottom:4px">'
             f'{esc(titulo)}</div></td></tr>')
 
 
@@ -80,8 +80,12 @@ def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> st
     if acao and href and href.startswith("http"):
         partes.append(f'<div style="padding-top:8px"><a href="{esc(href)}" style="font:600 12px/1 {FONTE};'
                       f'color:{MARINHO};text-decoration:underline">{esc(acao)}</a></div>')
-    return (f'<tr><td style="padding:16px 40px;border-bottom:1px solid {FILETE}">'
-            f'{"".join(partes)}</td></tr>')
+    # Card: filete fino e canto leve. Sem barra colorida na lateral; a cor
+    # fica para o rótulo e o link, que já dizem o que é cada coisa.
+    return (f'<tr><td style="padding:6px 40px">'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            f'style="border:1px solid {FILETE};border-radius:8px;background:#ffffff">'
+            f'<tr><td style="padding:16px 20px">{"".join(partes)}</td></tr></table></td></tr>')
 
 
 def nota(html_pronto) -> str:
@@ -111,7 +115,7 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>{esc(titulo)}</title></head>
 <body style="margin:0;padding:0;background:#ffffff">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0">{esc(previa)}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">{esc(previa)}{"&#847;&zwnj;&nbsp;" * 90}</div>
 <table role="presentation" width="680" cellpadding="0" cellspacing="0"
        style="width:100%;max-width:680px;background:#ffffff">
 <tr><td style="background:{MARINHO};padding:18px 40px">
