@@ -10,6 +10,8 @@ muda lá.
 """
 
 import html as _html
+import re as _re
+import unicodedata as _ud
 
 # Paleta igual à do manual da área (seção 5): planilha, documento e email usam os mesmos valores.
 
@@ -48,14 +50,42 @@ def numeros(pares) -> str:
             f'</td></tr></table>')
 
 
+def _ancora(titulo) -> str:
+    t = _ud.normalize("NFKD", str(titulo)).encode("ascii", "ignore").decode().lower()
+    return "s-" + (_re.sub(r"[^a-z0-9]+", "-", t).strip("-") or "secao")
+
+
 def secao(titulo, qtd=None) -> str:
-    """Nível 2 da escala: maior que o título do item, para a seção mandar na lista."""
+    """Nível 2 da escala: maior que o título do item, para a seção mandar na lista.
+
+    O comentário no começo é lido por pagina() para montar o sumário."""
     conta = (f'<span style="font:600 14px/1 {FONTE};color:{CINZA}"> &nbsp;{qtd}</span>'
              if qtd is not None else "")
-    return (f'<tr><td style="padding:40px 40px 0">'
+    marca = esc(titulo).replace("--", "-")
+    return (f'<!--secao:{marca}|{"" if qtd is None else qtd}-->'
+            f'<tr><td id="{_ancora(titulo)}" style="padding:40px 40px 0">'
+            f'<a name="{_ancora(titulo)}"></a>'
             f'<div style="height:3px;width:32px;background:{VINHO};font-size:0;line-height:0">&nbsp;</div>'
             f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:10px 0 8px">'
             f'{esc(titulo)}{conta}</div></td></tr>')
+
+
+def sumario(corpo_linhas) -> str:
+    """Lista das seções com a contagem, cada uma levando à seção. Só com 2 ou mais."""
+    secoes = _re.findall(r"<!--secao:(.*?)\|(.*?)-->", corpo_linhas)
+    if len(secoes) < 2:
+        return ""
+    linhas = "".join(
+        f'<tr><td style="padding:7px 0;border-top:1px solid {FILETE}">'
+        f'<a href="#{_ancora(_html.unescape(t))}" style="font:600 13px/1.4 {FONTE};color:{TINTA};'
+        f'text-decoration:none">{t}</a></td>'
+        f'<td align="right" style="padding:7px 0;border-top:1px solid {FILETE};'
+        f'font:600 13px/1.4 {FONTE};color:{CINZA}">{q}</td></tr>'
+        for t, q in secoes)
+    return (f'<tr><td style="padding:28px 40px 0">'
+            f'<div style="font:700 14px/1.4 {FONTE};color:{MARINHO};padding-bottom:6px">Sumário</div>'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{linhas}</table>'
+            f'</td></tr>')
 
 
 def subsecao(titulo) -> str:
@@ -137,6 +167,7 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
   {numeros(nums)}
 </td></tr>
 {bts_html}
+{sumario(corpo_linhas)}
 {corpo_linhas}
 <tr><td style="padding:32px 40px 36px;font:400 11px/1.6 {FONTE};color:{CINZA}">
   {rod}Envio automático da Eixo
