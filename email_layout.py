@@ -52,8 +52,7 @@ def secao(titulo, qtd=None) -> str:
     return (f'<!--secao:{marca}|{"" if qtd is None else qtd}-->'
             f'<tr><td id="{_ancora(titulo)}" style="padding:40px 40px 0">'
             f'<a name="{_ancora(titulo)}"></a>'
-            f'<div style="height:1px;background:{FILETE};font-size:0;line-height:0">&nbsp;</div>'
-            f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:16px 0 4px">'
+            f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:0 0 4px">'
             f'{esc(titulo)}{conta}</div></td></tr>')
 
 
@@ -71,7 +70,8 @@ def sumario(corpo_linhas) -> str:
         for t, q in secoes)
     return (f'<tr><td style="padding:28px 40px 0">'
             f'<div style="font:700 14px/1.4 {FONTE};color:{MARINHO};padding-bottom:6px">Sumário</div>'
-            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{linhas}</table>'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            f'style="border-bottom:1px solid {FILETE}">{linhas}</table>'
             f'</td></tr>')
 
 
@@ -103,7 +103,8 @@ def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> st
         partes.append(f'<div style="font:400 14px/1.6 {FONTE};color:{TINTA};padding-top:6px">{esc(texto)}</div>')
     if extra:
         partes.append(extra)
-    # Lista corrida: fio fino embaixo de cada item, sem caixa.
+    # Lista corrida: fio fino embaixo de cada item, sem caixa. A seção não tem fio
+    # próprio, senão o fio do último item e o da seção saem colados.
     return (f'<tr><td style="padding:0 40px"><div style="padding:16px 0;border-bottom:1px solid {FILETE}">'
             f'{"".join(partes)}</div></td></tr>')
 
