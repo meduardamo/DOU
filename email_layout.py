@@ -39,18 +39,21 @@ def numeros(pares) -> str:
 
 
 def secao(titulo, qtd=None) -> str:
-    conta = (f'<span style="color:{CINZA};font-weight:500"> &nbsp;{qtd}</span>'
+    """Nível 2 da escala: maior que o título do item, para a seção mandar na lista."""
+    conta = (f'<span style="font:600 14px/1 {FONTE};color:{CINZA}"> &nbsp;{qtd}</span>'
              if qtd is not None else "")
-    return (f'<tr><td style="padding:34px 40px 4px">'
-            f'<div style="font:700 11px/1.4 {FONTE};color:{VINHO};letter-spacing:1.5px;'
-            f'text-transform:uppercase;border-bottom:2px solid {MARINHO};padding-bottom:8px">'
+    return (f'<tr><td style="padding:40px 40px 0">'
+            f'<div style="height:3px;width:32px;background:{VINHO};font-size:0;line-height:0">&nbsp;</div>'
+            f'<div style="font:700 20px/1.3 {FONTE};color:{MARINHO};padding:10px 0 4px">'
             f'{esc(titulo)}{conta}</div></td></tr>')
 
 
 def subsecao(titulo) -> str:
-    return (f'<tr><td style="padding:18px 40px 0">'
-            f'<div style="font:700 11px/1.4 {FONTE};color:{CINZA};letter-spacing:1px;'
-            f'text-transform:uppercase">{esc(titulo)}</div></td></tr>')
+    """Nível 3: agrupa itens dentro da seção (UF, palavra-chave, tipo)."""
+    return (f'<tr><td style="padding:20px 40px 0">'
+            f'<div style="font:700 11px/1.4 {FONTE};color:{CINZA};letter-spacing:1.2px;'
+            f'text-transform:uppercase;border-bottom:1px solid {FILETE};padding-bottom:6px">'
+            f'{esc(titulo)}</div></td></tr>')
 
 
 def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> str:
@@ -60,8 +63,9 @@ def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> st
         tit = (f'<a href="{esc(href)}" style="color:{TINTA};text-decoration:none">{tit}</a>')
     partes = []
     if rotulo:
-        partes.append(f'<div style="font:600 10px/1.4 {FONTE};color:{MARINHO};letter-spacing:1px;'
-                      f'text-transform:uppercase;padding-bottom:4px">{esc(rotulo)}</div>')
+        # Rótulo do item em caixa normal e vinho: não compete com a subseção em caixa alta.
+        partes.append(f'<div style="font:600 12px/1.4 {FONTE};color:{VINHO};padding-bottom:4px">'
+                      f'{esc(rotulo)}</div>')
     partes.append(f'<div style="font:700 16px/1.35 {FONTE};color:{TINTA}">{tit}</div>')
     if meta:
         partes.append(f'<div style="font:500 12px/1.5 {FONTE};color:{CINZA};padding-top:4px">{esc(meta)}</div>')
@@ -70,9 +74,9 @@ def item(titulo, href="", rotulo="", meta="", texto="", acao="", extra="") -> st
     if extra:
         partes.append(extra)
     if acao and href and href.startswith("http"):
-        partes.append(f'<div style="padding-top:10px"><a href="{esc(href)}" style="font:700 12px/1 {FONTE};'
-                      f'color:{VINHO};text-decoration:none">{esc(acao)} &rarr;</a></div>')
-    return (f'<tr><td style="padding:18px 40px 18px;border-bottom:1px solid {FILETE}">'
+        partes.append(f'<div style="padding-top:8px"><a href="{esc(href)}" style="font:600 12px/1 {FONTE};'
+                      f'color:{MARINHO};text-decoration:underline">{esc(acao)}</a></div>')
+    return (f'<tr><td style="padding:16px 40px;border-bottom:1px solid {FILETE}">'
             f'{"".join(partes)}</td></tr>')
 
 
@@ -92,6 +96,8 @@ def pagina(kicker, titulo, data, corpo_linhas, nums=(), previa="", botoes=(),
            rodape="") -> str:
     """Email inteiro. `corpo_linhas` é a soma de secao()/item()/nota() (linhas de tabela)."""
     bts = "".join(botao(t, u) for t, u in botoes if u and u.startswith("http"))
+    # A faixa diz de que rotina é o email; se repete o título, fica só a marca.
+    kicker = "" if kicker.strip().lower() == titulo.strip().lower() else kicker
     bts_html = f'<tr><td style="padding:28px 40px 8px">{bts}</td></tr>' if bts else ""
     rod = f'<div style="padding-bottom:8px">{rodape}</div>' if rodape else ""
     return f"""<!doctype html>

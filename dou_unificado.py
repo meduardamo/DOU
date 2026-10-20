@@ -1249,7 +1249,7 @@ def _itens_dou(items: list[dict], limite: int) -> str:
     import email_layout as L
     linhas = "".join(
         L.item(it.get("title") or "(sem título)", href=it.get("href") or "",
-               rotulo=(it.get("secao") or "").strip(),
+               meta=(it.get("secao") or "").strip(),
                texto=_truncate(it.get("abstract") or "", 280), acao="Abrir no DOU")
         for it in items[:limite])
     if len(items) > limite:
