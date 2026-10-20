@@ -40,8 +40,12 @@ def numeros(pares) -> str:
     )
     if not celulas:
         return ""
-    return (f'<table role="presentation" cellpadding="0" cellspacing="0" '
-            f'style="margin:22px 0 0"><tr>{celulas}</tr></table>')
+    # Mesmo card dos itens, para os números lerem como bloco e não como texto solto.
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            f'style="margin:22px 0 0;border:1px solid {FILETE};border-radius:8px;background:#ffffff">'
+            f'<tr><td style="padding:18px 20px 16px">'
+            f'<table role="presentation" cellpadding="0" cellspacing="0"><tr>{celulas}</tr></table>'
+            f'</td></tr></table>')
 
 
 def secao(titulo, qtd=None) -> str:
