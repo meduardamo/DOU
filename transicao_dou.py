@@ -285,6 +285,22 @@ def _nome(segmento: str, verbo: str) -> str:
     return re.sub(r"\s+", " ", m.group("n")).strip() if m else ""
 
 
+PARTICULAS = {"de", "da", "do", "das", "dos", "e"}
+
+
+def _caixa_normal(nome: str) -> str:
+    """DOU publica nome em caixa alta; a planilha e o email usam caixa normal,
+    como a Alto Escalão e a Equipe 2027."""
+    if not nome or nome != nome.upper():
+        return nome
+    def palavra(w, i):
+        partes = re.split(r"([-'’])", w.lower())
+        partes = [p if p in "-'’" else (p if i and p in PARTICULAS else p[:1].upper() + p[1:])
+                  for p in partes]
+        return "".join(partes)
+    return " ".join(palavra(w, i) for i, w in enumerate(nome.split()))
+
+
 def extrai(it: dict, texto: str) -> list[dict]:
     hier = it.get("hierarchyStr") or ""
     m = re.search(r"\bresolve\b|\bdecreta\b|\bart\.\s*1", texto, re.I)
@@ -313,7 +329,7 @@ def extrai(it: dict, texto: str) -> list[dict]:
                 "Movimento": MOVIMENTO.get(verbo, verbo.title()),
                 "Órgão": orgao,
                 "Cargo": rotulo,
-                "Nome": _nome(seg, verbo),
+                "Nome": _caixa_normal(_nome(seg, verbo)),
                 "Trecho": trecho[:1500] + ("…" if len(trecho) > 1500 else ""),
                 "Ato": it.get("title", ""),
                 "Link": "https://www.in.gov.br/en/web/dou/-/" + (it.get("urlTitle") or ""),
