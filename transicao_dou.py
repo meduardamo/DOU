@@ -10,6 +10,11 @@ Os cargos vêm da lista pedida em 27/10/2026. O casamento é pelo nome do cargo
 escrito no ato ("para exercer o cargo de Secretário de Educação Básica do
 Ministério da Educação"), não pelo órgão que publica: quem nomeia secretário e
 presidente de autarquia é a Casa Civil.
+
+Também pega o desenho ministerial: medida provisória, lei ou decreto que mexe
+na Lei 14.600/2023 (organização dos ministérios) ou cria/transforma
+ministério, e decreto de estrutura regimental dos órgãos acompanhados, de
+Previdência e de Justiça e Segurança Pública.
 """
 
 import os
@@ -317,19 +322,93 @@ def extrai(it: dict, texto: str) -> list[dict]:
     return achados
 
 
+# ---------------------------------------------------------------------------
+# Desenho ministerial
+# ---------------------------------------------------------------------------
+
+DESENHO = "Desenho ministerial"
+ORGANIZACAO_RX = re.compile(
+    r"\b14 600\b|organizacao basica dos orgaos da presidencia|"
+    r"\b(?:cria|transforma|extingue|desmembra)\b[^.]{0,40}\bministerio")
+# Estrutura regimental: órgãos da lista mais os dois citados para a transição
+# (Segurança Pública e Trabalho/Previdência). FNDE e INEP têm estrutura própria.
+ESTRUTURA_DE = MINISTERIOS + [
+    (r"\bestudos e pesquisas educacionais\b", MEC),
+    (r"\bjustica e seguranca publica\b", "Ministério da Justiça e Segurança Pública"),
+    (r"\bministerio da seguranca publica\b", "Ministério da Segurança Pública"),
+    (r"\bprevidencia\b", "Ministério da Previdência Social"),
+]
+EMENTA_FIM_RX = re.compile(
+    r"\b(?:O|A)\s+PRESIDENT[EA]\s+DA\s+REP|\bO\s+VICE-PRESIDENTE|\bO\s+CONGRESSO\s+NACIONAL|"
+    r"\bFa[çc]o\s+saber|\bA\s+MESA\s+DA", re.I)
+
+
+def _candidato_desenho(it: dict) -> bool:
+    hier = (it.get("hierarchyStr") or "").strip()
+    if not re.match(r"atos do poder (executivo|legislativo)", hier, re.I):
+        return False
+    if not (it.get("secao") or "").startswith("DO1"):
+        return False
+    tipo = _norm(it.get("artType"))
+    # Decreto de pessoal sai na Seção 2; aqui só ato normativo.
+    return bool(re.search(r"decreto|medida provisoria|\blei\b", tipo)) and "pessoal" not in tipo
+
+
+def _ementa(it: dict, texto: str) -> str:
+    t = re.sub(r"\s+", " ", texto or "").strip()
+    titulo = re.sub(r"\s+", " ", it.get("title") or "").strip()
+    if titulo and t.upper().startswith(titulo.upper()):
+        t = t[len(titulo):].strip()
+    m = EMENTA_FIM_RX.search(t)
+    return (t[: m.start()] if m else t[:600]).strip()
+
+
+def extrai_desenho(it: dict, texto: str) -> list[dict]:
+    ementa = _ementa(it, texto)
+    e = _norm(ementa)
+    if ORGANIZACAO_RX.search(e):
+        movimento = "Organização dos ministérios"
+    elif "estrutura regimental" in e:
+        movimento = "Estrutura regimental"
+    else:
+        return []
+    orgaos = []
+    for rx, rotulo in ESTRUTURA_DE:
+        if re.search(rx, e) and rotulo not in orgaos:
+            orgaos.append(rotulo)
+    if movimento == "Estrutura regimental" and not orgaos:
+        return []  # estrutura de órgão fora da lista
+    return [{
+        "Data": it.get("pubDate", ""),
+        "Seção": it.get("secao", ""),
+        "Movimento": movimento,
+        "Órgão": "; ".join(orgaos),
+        "Cargo": "",
+        "Nome": "",
+        "Trecho": ementa[:1500],
+        "Ato": it.get("title", ""),
+        "Link": "https://www.in.gov.br/en/web/dou/-/" + (it.get("urlTitle") or ""),
+    }]
+
+
 def varre(datas: list[str]) -> list[dict]:
     achados, vistos = [], set()
     for data in datas:
         for sec in SECOES:
             itens = _edicao(data, sec)
-            cand = [it for it in itens if _candidato(it)]
+            cand = [(it, _candidato(it), _candidato_desenho(it)) for it in itens]
+            cand = [c for c in cand if c[1] or c[2]]
             print(f"[{data} {sec}] {len(itens)} itens, {len(cand)} baixados")
-            for it in cand:
+            for it, pessoal, desenho in cand:
                 link = "https://www.in.gov.br/en/web/dou/-/" + (it.get("urlTitle") or "")
                 if link in vistos:
                     continue
                 vistos.add(link)
-                achados.extend(extrai(it, _texto_ato(link)))
+                texto = _texto_ato(link)
+                if pessoal:
+                    achados.extend(extrai(it, texto))
+                if desenho:
+                    achados.extend(extrai_desenho(it, texto))
     return achados
 
 
@@ -431,10 +510,19 @@ def _html(novos: list[dict], url: str) -> str:
     import email_layout as L
     from dou_unificado import _titulo_dou
 
-    ordem = [MEC, ESP, MDS, SAU, MUL, MTE, CC]
     corpo = ""
+    desenho = [a for a in novos if not a["Cargo"]]
+    if desenho:
+        corpo += L.secao(DESENHO, len(desenho))
+        for a in desenho:
+            corpo += L.item(_titulo_dou(a["Ato"]), href=a["Link"],
+                            rotulo=" · ".join(x for x in (a["Movimento"], a["Órgão"]) if x),
+                            meta=f'{a["Data"]} · {a["Seção"]}',
+                            texto=a["Trecho"][:500] + ("…" if len(a["Trecho"]) > 500 else ""))
+
+    ordem = [MEC, ESP, MDS, SAU, MUL, MTE, CC]
     for orgao in ordem:
-        its = [a for a in novos if a["Órgão"] == orgao]
+        its = [a for a in novos if a["Órgão"] == orgao and a["Cargo"]]
         if not its:
             continue
         corpo += L.secao(orgao, len(its))
@@ -443,13 +531,13 @@ def _html(novos: list[dict], url: str) -> str:
             corpo += L.item(titulo, href=a["Link"], rotulo=a["Cargo"],
                             meta=f'{a["Data"]} · {a["Seção"]} · {_titulo_dou(a["Ato"])}',
                             texto=a["Trecho"][:400] + ("…" if len(a["Trecho"]) > 400 else ""))
-    orgaos = len({a["Órgão"] for a in novos})
+    orgaos = len({o for a in novos for o in a["Órgão"].split("; ") if o})
     return L.pagina(
-        "DOU · Transição", "Cargos acompanhados no DOU",
+        "DOU · Transição", "Transição federal no DOU",
         datetime.now(TZ_BR).strftime("%d/%m/%Y"), corpo,
         nums=[(len(novos), "atos novos" if len(novos) > 1 else "ato novo"),
               (orgaos, "órgãos" if orgaos > 1 else "órgão")],
-        previa=" · ".join(f'{a["Movimento"]} {a["Cargo"]}' for a in novos[:3]),
+        previa=" · ".join(f'{a["Movimento"]} {a["Cargo"] or a["Órgão"]}' for a in novos[:3]),
         botoes=[("Abrir a planilha", url)],
     )
 
