@@ -1,0 +1,55 @@
+name: DOU Transição
+
+# Cargos acompanhados na transição federal (lista de 27/10/2026). Cada rodada
+# lê ontem e hoje, grava o que for novo na aba "DOU federal" da planilha de
+# transição e só manda email se entrou linha. Várias rodadas no dia não
+# repetem email: o dedup é pela planilha. A das 23h pega a edição extra da
+# noite, e a da manhã seguinte confere ontem de novo.
+on:
+  schedule:
+    - cron: "30 10 * * *" # 07:30 BRT
+    - cron: "0 16 * * *" # 13:00 BRT
+    - cron: "0 22 * * *" # 19:00 BRT
+    - cron: "0 2 * * *" # 23:00 BRT
+  workflow_dispatch:
+    inputs:
+      data:
+        description: "Dias específicos (dd-mm-aaaa, separados por vírgula). Vazio = ontem e hoje."
+        required: false
+        default: ""
+      para:
+        description: "Mandar o email só para este endereço (teste). Vazio = destinatários do secret."
+        required: false
+        default: ""
+
+concurrency:
+  group: dou-transicao
+  cancel-in-progress: false
+
+jobs:
+  transicao:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run DOU transição
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA_TRANSICAO: ${{ secrets.PLANILHA_TRANSICAO }}
+          EMAIL: ${{ secrets.EMAIL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          DESTINATARIOS_TRANSICAO: ${{ github.event.inputs.para || secrets.DESTINATARIOS_TRANSICAO }}
+          DOU_DATE: ${{ github.event.inputs.data }}
+        run: |
+          python transicao_dou.py
