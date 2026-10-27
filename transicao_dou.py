@@ -95,7 +95,12 @@ UNIDADES = [
 UNIDADES_RX = [(o, r, re.compile(r"^" + p)) for o, r, p in UNIDADES]
 
 # Ministro e secretário-executivo: só dos órgãos da lista.
-MINISTRO_DE = {MEC, ESP, MDS, SAU, MUL, MTE, CC}
+MINISTRO_DE = {
+    MEC: "Ministro da Educação", ESP: "Ministro do Esporte",
+    MDS: "Ministro do Desenvolvimento e Assistência Social", SAU: "Ministro da Saúde",
+    MUL: "Ministra das Mulheres", MTE: "Ministro do Trabalho e Emprego",
+    CC: "Ministro-chefe da Casa Civil",
+}
 SE_DE = {MEC, ESP, MDS, MUL, CC}
 
 MINISTRO_RX = re.compile(r"^ministr[oa] de estado (?:chefe )?(?:d[aoe]s? )?(?P<resto>.*)")
@@ -246,7 +251,7 @@ def _casa_cargo(cargo: str, hier: str) -> tuple[str, str] | None:
     if m:
         orgao = _orgao_do_cargo(m.group("resto"), "")
         if orgao in MINISTRO_DE:
-            return orgao, ("Ministro-chefe da Casa Civil" if orgao == CC else "Ministro(a)")
+            return orgao, MINISTRO_DE[orgao]
         return None
     m = SE_RX.match(c)
     if m:
@@ -412,6 +417,8 @@ def grava(achados: list[dict]) -> tuple[list[dict], str]:
         return [], url
 
     ws.insert_rows([[a[c] for c in COLS] for a in novos], row=2, value_input_option="RAW")
+    # Grade no tamanho dos dados: a aba nasce com uma linha vazia que desce a cada inserção.
+    ws.resize(rows=max(len(vals), 1) + len(novos))
     print(f"+{len(novos)} linhas em {ABA}.")
     return novos, url
 
@@ -422,6 +429,7 @@ def grava(achados: list[dict]) -> tuple[list[dict], str]:
 
 def _html(novos: list[dict], url: str) -> str:
     import email_layout as L
+    from dou_unificado import _titulo_dou
 
     ordem = [MEC, ESP, MDS, SAU, MUL, MTE, CC]
     corpo = ""
@@ -433,7 +441,7 @@ def _html(novos: list[dict], url: str) -> str:
         for a in its:
             titulo = f'{a["Movimento"]}: {a["Nome"]}' if a["Nome"] else a["Movimento"]
             corpo += L.item(titulo, href=a["Link"], rotulo=a["Cargo"],
-                            meta=f'{a["Data"]} · {a["Seção"]} · {a["Ato"]}',
+                            meta=f'{a["Data"]} · {a["Seção"]} · {_titulo_dou(a["Ato"])}',
                             texto=a["Trecho"][:400] + ("…" if len(a["Trecho"]) > 400 else ""))
     orgaos = len({a["Órgão"] for a in novos})
     return L.pagina(
