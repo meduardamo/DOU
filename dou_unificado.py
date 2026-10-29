@@ -1394,6 +1394,12 @@ def envia_emails_edicao(
     planilha_clientes_id: str,
     subject_prefix: str,
 ) -> None:
+    # DOU_SEM_EMAIL=1: backfill de dia antigo grava na planilha e não manda email.
+    if os.getenv("DOU_SEM_EMAIL", "").strip().lower() in ("1", "true", "sim"):
+        total_cli = sum(len(v) for v in (inserted_clientes or {}).values())
+        print(f"Sem email (DOU_SEM_EMAIL) — {total_cli} linhas novas de clientes só na planilha.")
+        return
+
     # Email geral desligado em 20/10/2026 (decisão dela): só o de clientes sai.
     # As linhas gerais continuam gravadas na planilha. Para religar, True.
     rec_geral = _pick_recipients("DESTINATARIOS_GERAL")
@@ -1491,7 +1497,9 @@ if __name__ == "__main__":
     if modo == "regular":
         executar_regular(data=data_env)
     elif modo == "extra":
-        executar_extra(data=data_env)
+        # DOU_DATE aceita várias datas separadas por vírgula (backfill em lote).
+        for d in ([x.strip() for x in data_env.split(",") if x.strip()] if data_env else [None]):
+            executar_extra(data=d)
     elif modo == "extra_retroativo":
         executar_extra()
         ontem = (now_br() - timedelta(days=1)).strftime("%d-%m-%Y")

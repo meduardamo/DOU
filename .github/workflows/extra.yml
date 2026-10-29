@@ -7,9 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       data:
-        description: "Backfill de um dia (dd-mm-aaaa). Vazio = hoje."
+        description: "Backfill (dd-mm-aaaa; várias separadas por vírgula). Vazio = hoje e ontem."
         required: false
         default: ""
+      sem_email:
+        description: "Só grava na planilha, sem email (backfill de dia antigo)."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: dou-extra
@@ -57,6 +62,7 @@ jobs:
           DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           DOU_DATE: ${{ github.event.inputs.data }}  # backfill dd-mm-aaaa; vazio = hoje
+          DOU_SEM_EMAIL: ${{ github.event.inputs.sem_email }}
         # Sem data: hoje e ontem. A extra costuma sair depois das 21h e o cron
         # das 23h atrasa para depois da meia-noite, quando "hoje" já virou.
         # A deduplicação por link + palavra-chave evita gravar e mandar de novo.
