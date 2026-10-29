@@ -6,7 +6,9 @@ aba "DOU federal" da planilha de transição e manda email só quando entra
 linha nova. Dedup por link + cargo + movimento + nome, então rodar várias
 vezes no dia não repete nada.
 
-Os cargos vêm da lista pedida em 27/10/2026. O casamento é pelo nome do cargo
+Os cargos vêm da lista pedida em 27/10/2026, ampliada em 29/10/2026 (Saúde,
+MDS e Mulheres com mais secretarias; Direitos Humanos, Justiça, Fazenda, Meio
+Ambiente, Minas e Energia e Comunicações). O casamento é pelo nome do cargo
 escrito no ato ("para exercer o cargo de Secretário de Educação Básica do
 Ministério da Educação"), não pelo órgão que publica: quem nomeia secretário e
 presidente de autarquia é a Casa Civil.
@@ -14,7 +16,8 @@ presidente de autarquia é a Casa Civil.
 Também pega o desenho ministerial: medida provisória, lei ou decreto que mexe
 na Lei 14.600/2023 (organização dos ministérios) ou cria/transforma
 ministério, e decreto de estrutura regimental dos órgãos acompanhados, de
-Previdência e de Justiça e Segurança Pública.
+Previdência e de Justiça e Segurança Pública. E a composição e a presidência
+do Conanda, que saem em portaria do Gabinete do MDHC e em resolução do conselho.
 """
 
 import os
@@ -56,9 +59,17 @@ SAU = "Ministério da Saúde"
 MUL = "Ministério das Mulheres"
 MTE = "Ministério do Trabalho e Emprego"
 CC = "Casa Civil"
+MDHC = "Ministério dos Direitos Humanos e da Cidadania"
+MJSP = "Ministério da Justiça e Segurança Pública"
+MSP = "Ministério da Segurança Pública"
+FAZ = "Ministério da Fazenda"
+MMA = "Ministério do Meio Ambiente e Mudança do Clima"
+MME = "Ministério de Minas e Energia"
+MCOM = "Ministério das Comunicações"
 
 # Ministério como aparece no texto do ato (sem acento, minúsculo) -> rótulo.
 # "trabalho" sozinho cobre uma eventual volta do Trabalho e Previdência.
+# Segurança Pública só como ministério próprio, caso seja desmembrado do MJSP.
 MINISTERIOS = [
     (r"\beducacao\b", MEC),
     (r"\besporte\b", ESP),
@@ -67,6 +78,13 @@ MINISTERIOS = [
     (r"\bmulheres\b", MUL),
     (r"\btrabalho\b", MTE),
     (r"\bcasa civil\b", CC),
+    (r"\bdireitos humanos\b", MDHC),
+    (r"\bjustica e seguranca publica\b", MJSP),
+    (r"\bministerio da seguranca publica\b|^seguranca publica\b", MSP),
+    (r"\bfazenda\b", FAZ),
+    (r"\bmeio ambiente\b", MMA),
+    (r"\bminas e energia\b", MME),
+    (r"\bcomunicacoes\b", MCOM),
 ]
 
 # Cargo de chefia de unidade: (órgão, rótulo, regex no começo do nome do cargo).
@@ -92,10 +110,68 @@ UNIDADES = [
      r"secretari[oa] de avaliacao gestao da informacao e cadastro unico"),
     (MDS, "Secretaria Nacional de Renda de Cidadania (SENARC)",
      r"secretari[oa] nacional de renda de cidadania"),
+    (MDS, "Secretaria Nacional de Segurança Alimentar e Nutricional (SESAN)",
+     r"secretari[oa] nacional de seguranca alimentar e nutricional"),
+    (MDS, "Secretaria Nacional de Benefícios Assistenciais (SNBA)",
+     r"secretari[oa] nacional de beneficios assistenciais"),
     (SAU, "Secretaria de Atenção Primária à Saúde (SAPS)",
      r"secretari[oa] de atencao primaria a saude"),
+    (SAU, "Secretaria de Atenção Especializada à Saúde (SAES)",
+     r"secretari[oa] de atencao especializada a saude"),
+    # Antiga SCTIE; o DOU já usa o nome novo, mas aceita o antigo.
+    (SAU, "Secretaria de Ciência, Tecnologia, Inovação e Complexo da Saúde (SECTICS)",
+     r"secretari[oa] de ciencia tecnologia (?:e )?inovacao (?:e complexo da saude|em saude)"),
+    (SAU, "Secretaria de Vigilância em Saúde e Ambiente (SVSA)",
+     r"secretari[oa] de vigilancia em saude"),
+    (SAU, "Secretaria de Gestão do Trabalho e da Educação na Saúde (SGTES)",
+     r"secretari[oa] de gestao do trabalho e da educacao na saude"),
+    (SAU, "Secretaria de Informação e Saúde Digital (SEIDIGI)",
+     r"secretari[oa] de informacao e saude digital"),
+    (SAU, "Secretaria de Saúde Indígena (SESAI)",
+     r"secretari[oa] (?:especial )?de saude indigena"),
+    (SAU, "Departamento de Gestão do Cuidado Integral (DGCI)",
+     r"diretora? do departamento de gestao do cuidado integral"),
+    (SAU, "Departamento de Saúde Mental, Álcool e outras Drogas (DESMAD)",
+     r"diretora? do departamento de saude mental alcool e outras drogas"),
+    (SAU, "Departamento de Gestão e Incorporação de Tecnologias em Saúde (DGITS)",
+     r"diretora? do departamento de gestao e incorporacao de tecnologias em saude"),
+    (SAU, "Departamento de Assistência Farmacêutica e Insumos Estratégicos (DAF)",
+     r"diretora? do departamento de assistencia farmaceutica e insumos estrategicos"),
+    (SAU, "Departamento de Análise Epidemiológica e Vigilância de Doenças Não Transmissíveis (DAENT)",
+     r"diretora? do departamento de analise epidemiologica e vigilancia de doencas nao transmissiveis"),
+    (SAU, "Departamento de Saúde Digital e Inovação (DESD)",
+     r"diretora? do departamento de saude digital e inovacao"),
+    (SAU, "Departamento de Informação e Informática do SUS (DATASUS)",
+     r"diretora? do departamento de informacao e informatica do (?:sistema unico de saude|sus)"),
     (MUL, "Secretaria Nacional de Autonomia Econômica",
      r"secretari[oa] nacional de autonomia economica"),
+    (MUL, "Secretaria Nacional de Enfrentamento à Violência contra Mulheres",
+     r"secretari[oa] nacional de enfrentamento a violencia contra (?:as )?mulheres"),
+    # Nome novo (out/2026) e o anterior.
+    (MUL, "Secretaria Nacional de Articulação Intersetorial e Interfederativa e Participação Política",
+     r"secretari[oa] nacional de articulacao (?:intersetorial e interfederativa|institucional acoes tematicas)"
+     r" e participacao politica"),
+    (MDHC, "Secretaria Nacional dos Direitos da Criança e do Adolescente (SNDCA)",
+     r"secretari[oa] nacional dos direitos da crianca e do adolescente"),
+    (MDHC, "Diretoria de Proteção da Criança e do Adolescente",
+     r"diretora? (?:da diretoria )?de protecao da crianca e do adolescente"),
+    (MJSP, "Secretaria Nacional do Consumidor (Senacon)", r"secretari[oa] nacional do consumidor"),
+    (MJSP, "Secretaria de Direitos Digitais (SEDIGI)", r"secretari[oa] (?:nacional )?de direitos digitais"),
+    (MJSP, "Secretaria Nacional de Políticas sobre Drogas e Gestão de Ativos (SENAD)",
+     r"secretari[oa] nacional de politicas sobre drogas"),
+    (MJSP, "Secretaria Nacional de Segurança Pública (SENASP)",
+     r"secretari[oa] nacional de seguranca publica"),
+    (FAZ, "Secretaria de Prêmios e Apostas (SPA)", r"secretari[oa] de premios e apostas"),
+    (FAZ, "Secretaria de Reformas Econômicas (SRE)", r"secretari[oa] de reformas economicas"),
+    (FAZ, "Secretaria Especial da Receita Federal do Brasil", r"secretari[oa] especial da receita federal"),
+    (FAZ, "Secretaria de Política Econômica (SPE)", r"secretari[oa] de politica economica"),
+    (MMA, "Secretaria Nacional de Mudança do Clima", r"secretari[oa] nacional de mudanca do clima"),
+    (MMA, "Secretaria Nacional de Meio Ambiente Urbano, Recursos Hídricos e Qualidade Ambiental",
+     r"secretari[oa] nacional de meio ambiente urbano"),
+    (MME, "Secretaria Nacional de Energia Elétrica", r"secretari[oa] nacional de energia eletrica"),
+    (MME, "Secretaria Nacional de Transição Energética e Planejamento",
+     r"secretari[oa] nacional de transicao energetica"),
+    (MCOM, "Secretaria de Telecomunicações", r"secretari[oa] de telecomunicacoes"),
 ]
 UNIDADES_RX = [(o, r, re.compile(r"^" + p)) for o, r, p in UNIDADES]
 
@@ -105,8 +181,12 @@ MINISTRO_DE = {
     MDS: "Ministro do Desenvolvimento e Assistência Social", SAU: "Ministro da Saúde",
     MUL: "Ministra das Mulheres", MTE: "Ministro do Trabalho e Emprego",
     CC: "Ministro-chefe da Casa Civil",
+    MDHC: "Ministro dos Direitos Humanos e da Cidadania",
+    MJSP: "Ministro da Justiça e Segurança Pública", MSP: "Ministro da Segurança Pública",
+    FAZ: "Ministro da Fazenda", MMA: "Ministra do Meio Ambiente e Mudança do Clima",
+    MME: "Ministro de Minas e Energia", MCOM: "Ministro das Comunicações",
 }
-SE_DE = {MEC, ESP, MDS, MUL, CC}
+SE_DE = {MEC, ESP, MDS, SAU, MUL, CC, MDHC, MJSP, MSP, FAZ, MMA, MME, MCOM}
 
 MINISTRO_RX = re.compile(r"^ministr[oa] de estado (?:chefe )?(?:d[aoe]s? )?(?P<resto>.*)")
 SE_RX = re.compile(r"^secretari[oa] executiv[oa](?! adjunt)(?P<resto>.*)")
@@ -131,7 +211,9 @@ CARGO_RX = re.compile(
     r"|;|\.\s|\.$|\n|$)",
     re.I | re.S,
 )
-CODIGO_RX = re.compile(r",?\s*(?:c[oó]digo\s+)?(?:CCE|FCE|DAS|CDT|NE)\s*[\d\.]*\s*,?", re.I)
+# Sigla em maiúscula e palavra inteira: sem isso "das" de "Ministra das Mulheres" e
+# "ne" de "Energia" e "Benefícios" sumiam do nome do cargo.
+CODIGO_RX = re.compile(r",?\s*(?:[cC][oó]digo\s+)?\b(?:CCE|FCE|DAS|CDT|NE)\b\s*[\d\.]*\s*,?")
 
 
 def _sem_codigo(cargo: str) -> str:
@@ -145,18 +227,26 @@ TEMPORARIO_RX = re.compile(r"substitut|interin")
 PERIODO_RX = re.compile(r"substituto eventual|periodo|nos dias|no dia|impediment|afastament|ferias|viage|ausencia")
 
 # Órgão que publica e pode conter ato desses cargos (decreto e portaria da Casa
-# Civil saem sob Presidência da República). Universidade, instituto federal e
-# hospital do MEC e da Saúde publicam muito ato de pessoal e nunca destes cargos.
+# Civil saem sob Presidência da República). Universidade, instituto federal,
+# hospital, Receita, polícias, autarquias e superintendências regionais publicam
+# muito ato de pessoal e nunca destes cargos.
 PUBLICA_RX = re.compile(
     r"^(presid[eê]ncia da rep[uú]blica|atos do poder executivo|minist[eé]rio da educa[cç][aã]o|minist[eé]rio do esporte|"
     r"minist[eé]rio do desenvolvimento e assist[eê]ncia social|minist[eé]rio da sa[uú]de|"
-    r"minist[eé]rio das mulheres|minist[eé]rio do trabalho)",
+    r"minist[eé]rio das mulheres|minist[eé]rio do trabalho|minist[eé]rio dos direitos humanos|"
+    r"minist[eé]rio da justi[cç]a|minist[eé]rio da seguran[cç]a p[uú]blica|minist[eé]rio da fazenda|"
+    r"minist[eé]rio do meio ambiente|minist[eé]rio de minas e energia|minist[eé]rio das comunica[cç][oõ]es)",
     re.I,
 )
 FORA_RX = re.compile(
     r"universidade|instituto federal|centro federal|col[eé]gio|hospital|"
     r"funda[cç][aã]o universidade|empresa brasileira de servi[cç]os hospitalares|"
-    r"funda[cç][aã]o oswaldo cruz|ag[eê]ncia nacional|instituto nacional do c[aâ]ncer",
+    r"funda[cç][aã]o oswaldo cruz|ag[eê]ncia nacional|instituto nacional do c[aâ]ncer|"
+    r"distrito sanit[aá]rio|funda[cç][aã]o nacional de sa[uú]de|superintend[eê]ncia|"
+    r"receita federal|procuradoria-geral da fazenda|conselho administrativo|comiss[aã]o de valores|"
+    r"pol[ií]cia|pol[ií]ticas penais|arquivo nacional|instituto brasileiro do meio ambiente|"
+    r"instituto chico mendes|jardim bot[aâ]nico|servi[cç]o florestal|servi[cç]o geol[oó]gico|"
+    r"empresa de pesquisa energ[eé]tica",
     re.I,
 )
 
@@ -268,6 +358,9 @@ def _casa_cargo(cargo: str, hier: str) -> tuple[str, str] | None:
         return None
     for orgao, rotulo, rx in UNIDADES_RX:
         if rx.match(c):
+            # SENASP muda de pasta se a Segurança Pública sair do MJSP.
+            if orgao == MJSP and "ministerio da seguranca publica" in c:
+                orgao = MSP
             return orgao, rotulo
     return None
 
@@ -350,8 +443,6 @@ ORGANIZACAO_RX = re.compile(
 # (Segurança Pública e Trabalho/Previdência). FNDE e INEP têm estrutura própria.
 ESTRUTURA_DE = MINISTERIOS + [
     (r"\bestudos e pesquisas educacionais\b", MEC),
-    (r"\bjustica e seguranca publica\b", "Ministério da Justiça e Segurança Pública"),
-    (r"\bministerio da seguranca publica\b", "Ministério da Segurança Pública"),
     (r"\bprevidencia\b", "Ministério da Previdência Social"),
 ]
 EMENTA_FIM_RX = re.compile(
@@ -407,15 +498,68 @@ def extrai_desenho(it: dict, texto: str) -> list[dict]:
     }]
 
 
+# ---------------------------------------------------------------------------
+# Conanda
+# ---------------------------------------------------------------------------
+
+CONANDA = "Conanda"
+CONANDA_RX = re.compile(r"conselho nacional dos direitos da criancas? e do adolescentes?|\bconanda\b")
+# A Lei 8.242/1991 é a do Conanda; a portaria do Gabinete que designa os
+# conselheiros cita a lei no preâmbulo, que é o que aparece no resumo.
+CONANDA_LEI_RX = re.compile(r"\b8 242\b")
+CONANDA_TEMA_RX = re.compile(r"\bcompor(?:em)?\b|composicao|representantes|presiden|eleicao|eleitoral|mandato|\bposse\b")
+# Presidência do próprio conselho; "Casa Civil da Presidência da República" aparece
+# na lista de representantes do governo.
+CONANDA_PRESID_RX = re.compile(r"(?:vice )?presiden(?:te|cia)\b(?! da republica)")
+# Fim da ementa: começo do preâmbulo em caixa alta ("O CONSELHO NACIONAL...",
+# "A MINISTRA DE ESTADO..."). Assinatura e preâmbulo citam "Presidente do
+# Conselho" em toda resolução, por isso só ementa e dispositivo contam.
+PREAMBULO_RX = re.compile(r"\b(?:O|A|OS|AS)\s+[A-ZÀ-Ý]{3,}\s+[A-ZÀ-Ý]")
+
+
+def _candidato_conanda(it: dict) -> bool:
+    hier = _norm(it.get("hierarchyStr"))
+    if not hier.startswith("ministerio dos direitos humanos"):
+        return False
+    resumo = _norm(it.get("content"))
+    return bool(CONANDA_RX.search(hier + " " + resumo) or CONANDA_LEI_RX.search(resumo))
+
+
+def extrai_conanda(it: dict, texto: str) -> list[dict]:
+    t = re.sub(r"\s+", " ", texto or "").strip()
+    titulo = re.sub(r"\s+", " ", it.get("title") or "").strip()
+    if titulo and t.upper().startswith(titulo.upper()):
+        t = t[len(titulo):].strip()
+    m = PREAMBULO_RX.search(t)
+    ementa = t[: m.start()] if m else ""
+    m = re.search(r"\bresolve\s*:?", t, re.I)
+    dispositivo = t[m.end(): m.end() + 600] if m else ""
+    janela = (ementa + " " + dispositivo).strip()
+    n = _norm(janela)
+    if not CONANDA_RX.search(n) or not CONANDA_TEMA_RX.search(n):
+        return []
+    return [{
+        "Data": it.get("pubDate", ""),
+        "Seção": it.get("secao", ""),
+        "Movimento": "Presidência" if CONANDA_PRESID_RX.search(n) else "Composição",
+        "Órgão": MDHC,
+        "Cargo": CONANDA,
+        "Nome": "",
+        "Trecho": janela[:1500],
+        "Ato": it.get("title", ""),
+        "Link": "https://www.in.gov.br/en/web/dou/-/" + (it.get("urlTitle") or ""),
+    }]
+
+
 def varre(datas: list[str]) -> list[dict]:
     achados, vistos = [], set()
     for data in datas:
         for sec in SECOES:
             itens = _edicao(data, sec)
-            cand = [(it, _candidato(it), _candidato_desenho(it)) for it in itens]
-            cand = [c for c in cand if c[1] or c[2]]
+            cand = [(it, _candidato(it), _candidato_desenho(it), _candidato_conanda(it)) for it in itens]
+            cand = [c for c in cand if any(c[1:])]
             print(f"[{data} {sec}] {len(itens)} itens, {len(cand)} baixados")
-            for it, pessoal, desenho in cand:
+            for it, pessoal, desenho, conanda in cand:
                 link = "https://www.in.gov.br/en/web/dou/-/" + (it.get("urlTitle") or "")
                 if link in vistos:
                     continue
@@ -425,6 +569,8 @@ def varre(datas: list[str]) -> list[dict]:
                     achados.extend(extrai(it, texto))
                 if desenho:
                     achados.extend(extrai_desenho(it, texto))
+                if conanda:
+                    achados.extend(extrai_conanda(it, texto))
     return achados
 
 
@@ -536,7 +682,8 @@ def _html(novos: list[dict], url: str) -> str:
                             meta=f'{a["Data"]} · {a["Seção"]}',
                             texto=a["Trecho"][:500] + ("…" if len(a["Trecho"]) > 500 else ""))
 
-    ordem = [MEC, ESP, MDS, SAU, MUL, MTE, CC]
+    ordem = [MEC, ESP, SAU, MDS, MUL, MDHC, MJSP, MSP, FAZ, MMA, MME, MCOM, MTE, CC]
+    ordem += sorted({a["Órgão"] for a in novos if a["Cargo"]} - set(ordem))
     for orgao in ordem:
         its = [a for a in novos if a["Órgão"] == orgao and a["Cargo"]]
         if not its:
