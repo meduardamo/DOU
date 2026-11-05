@@ -12,7 +12,7 @@ MODEL_NAME        = "gemini-3.6-flash"   # 2.5-flash dá 404 para a chave do pro
 PLANILHA_CLIENTES = os.getenv("PLANILHA_CLIENTES")
 # A aba da Mevo continua na planilha, mas não recebe mais linhas nem
 # classificação. As de IAS e Reúna já não existem.
-SKIP_SHEETS       = {"Giro de notícias", "Mevo"}
+SKIP_SHEETS       = {"Giro de notícias", "Mevo", "_descartadas"}
 
 # Colunas esperadas
 COL_DATA     = "Data"
@@ -227,6 +227,53 @@ def _ensure_cols(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Aba oculta com o que o alinhamento apagou por "Não Alinha" (aba, id, data).
+# O raspador lê esta aba para não gravar de novo, nas rodadas seguintes, o item
+# que acabou de sair (e não mandar de novo no email nem pagar outra classificação).
+ABA_DESCARTADAS = "_descartadas"
+DESCARTADAS_DIAS = int(os.getenv("DESCARTADAS_DIAS", "4"))
+
+
+def _registrar_descartadas(sh, aba, ids):
+    """Acrescenta (aba, id, data) na aba oculta e apaga o que passou de
+    DESCARTADAS_DIAS. Falha aqui não pode impedir a limpeza da aba."""
+    ids = [str(i).strip() for i in ids if str(i).strip()]
+    if not ids:
+        return
+    try:
+        try:
+            wsd = sh.worksheet(ABA_DESCARTADAS)
+        except gspread.WorksheetNotFound:
+            wsd = sh.add_worksheet(ABA_DESCARTADAS, rows=2, cols=3)
+            wsd.update([["aba", "id", "data"]], "A1")
+            sh.batch_update({"requests": [{"updateSheetProperties": {
+                "properties": {"sheetId": wsd.id, "hidden": True},
+                "fields": "hidden"}}]})
+        agora = pd.Timestamp.now(tz="America/Sao_Paulo")
+        hoje = agora.strftime("%Y-%m-%d")
+        corte = (agora - pd.Timedelta(days=DESCARTADAS_DIAS)).strftime("%Y-%m-%d")
+        vals = wsd.get_all_values()
+        antigos = [r[:3] for r in vals[1:] if len(r) >= 3 and r[2] >= corte]
+        linhas = [["aba", "id", "data"]] + antigos + [[aba, i, hoje] for i in ids]
+        wsd.clear()
+        wsd.resize(rows=len(linhas), cols=3)
+        wsd.update(linhas, "A1", value_input_option="RAW")
+    except Exception as e:
+        print(f"[{aba}] aviso: não registrei os descartados ({e})")
+
+
+def _apagar_linhas(ws, linhas_1based):
+    """Apaga as linhas numa chamada só, de baixo para cima."""
+    linhas = sorted({int(r) for r in linhas_1based if int(r) >= 2}, reverse=True)
+    if not linhas:
+        return 0
+    reqs = [{"deleteDimension": {"range": {"sheetId": ws.id, "dimension": "ROWS",
+             "startIndex": r - 1, "endIndex": r}}} for r in linhas]
+    for k in range(0, len(reqs), 500):
+        ws.spreadsheet.batch_update({"requests": reqs[k:k + 500]})
+    return len(linhas)
+
+
 def pick_conteudo(row: pd.Series) -> str:
     txt = str(row.get(COL_CONTEUDO, "") or "").strip()
     if not txt:
@@ -263,6 +310,7 @@ def process_sheet(ws) -> None:
     idxs = list(df[mask].index)
     if not idxs:
         print(f"[{title}] nenhuma linha pendente.")
+        _limpar_nao_alinha(ws, df)
         return
 
     print(f"[{title}] classificando {len(idxs)} linha(s)...")
@@ -280,6 +328,23 @@ def process_sheet(ws) -> None:
         set_with_dataframe(ws, df, include_index=False, include_column_header=True, resize=False)
         ultima = idxs[min(chunk_start + BATCH_SIZE - 1, len(idxs) - 1)] + 2
         print(f"[{title}] ✅ salvo até a linha {ultima}")
+
+    _limpar_nao_alinha(ws, df)
+
+
+def _limpar_nao_alinha(ws, df) -> None:
+    """Apaga as linhas "Não Alinha" e guarda o link na aba _descartadas.
+    O df é o retrato da aba (linha 2 em diante), na mesma ordem."""
+    if COL_ALINH not in df.columns:
+        return
+    nao = [i for i, v in enumerate(df[COL_ALINH].astype(str).str.strip().str.lower())
+           if v in ("não alinha", "nao alinha")]
+    if not nao:
+        return
+    _registrar_descartadas(ws.spreadsheet, ws.title,
+                           [df.iloc[i][COL_LINK] for i in nao] if COL_LINK in df.columns else [])
+    n = _apagar_linhas(ws, [i + 2 for i in nao])
+    print(f"[{ws.title}] 🧹 {n} linha(s) 'Não Alinha' removida(s).")
 
 
 def main():

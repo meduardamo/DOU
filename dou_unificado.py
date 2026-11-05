@@ -1121,6 +1121,16 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
     total_new    = 0
     inserted_map: dict[str, list] = {}
 
+    # Links que o alinhamento apagou por "Não Alinha" (aba oculta _descartadas):
+    # não voltam para a aba nem para o email.
+    descartadas: dict[str, set[str]] = {}
+    try:
+        for r in _gs_retry("ler _descartadas", sh.worksheet("_descartadas").get_all_values)[1:]:
+            if len(r) >= 2:
+                descartadas.setdefault(r[0], set()).add(r[1].strip())
+    except Exception:
+        pass
+
     for cli, rows in (por_cliente or {}).items():
         if not rows:
             continue
@@ -1145,7 +1155,7 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
             kw   = (r[kw_idx]   or "").strip()
             cli_ = (r[cli_idx]  or "").strip()
             key  = (href, kw, cli_)
-            if not href or key in existing:
+            if not href or key in existing or href in descartadas.get(cli, ()):
                 continue
             new_rows.append(r)
             inserted_items.append({
