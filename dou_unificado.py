@@ -1446,7 +1446,9 @@ def _fora_do_alinhamento(it: dict) -> bool:
     return a.startswith("nao")
 
 
-CONFERIR_COMPACTO = os.getenv("DOU_CONFERIR_COMPACTO", "").strip().lower() in ("1", "true", "sim")
+# Ligado em 16/11/2026 (aprovado por ela): relevante x provável lixo. Para o
+# formato anterior, DOU_CONFERIR_COMPACTO=0.
+CONFERIR_COMPACTO = os.getenv("DOU_CONFERIR_COMPACTO", "1").strip().lower() not in ("0", "false", "nao", "não")
 
 # Classificação do modelo em palavras da equipe: (texto da etiqueta, cor, fundo).
 # Etiquetas neutras: lixo não é "contra o cliente", é "sem relação".
