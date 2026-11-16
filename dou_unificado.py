@@ -1449,8 +1449,9 @@ def _fora_do_alinhamento(it: dict) -> bool:
 CONFERIR_COMPACTO = os.getenv("DOU_CONFERIR_COMPACTO", "").strip().lower() in ("1", "true", "sim")
 
 # Classificação do modelo em palavras da equipe: (texto da etiqueta, cor, fundo).
+# Etiquetas neutras: lixo não é "contra o cliente", é "sem relação".
 _ETIQUETA_CONFERIR = {
-    "nao alinha": ("Fora do tema", "#962E4D", "#F3E3E8"),
+    "nao alinha": ("Sem relação com o cliente", "#5F5F5F", "#E4E2DB"),
     "nao se aplica": ("Ato de rotina", "#5F5F5F", "#E4E2DB"),
 }
 
@@ -1468,7 +1469,7 @@ def _bloco_conferir(items: list[dict], limite: int) -> str:
         tit = L.esc(_titulo_dou(it.get("title") or "(sem título)"))
         href = it.get("href") or ""
         if href.startswith("http"):
-            tit = f'<a href="{L.esc(href)}" style="color:{L.MARINHO};text-decoration:none">{tit}</a>'
+            tit = f'<a href="{L.esc(href)}" style="color:#4A4A4A;text-decoration:none">{tit}</a>'
         just = (it.get("justificativa") or "").strip()
         fio = f"border-top:1px solid #E1DED6;" if k else ""
         linhas += (
@@ -1477,7 +1478,7 @@ def _bloco_conferir(items: list[dict], limite: int) -> str:
             f'<span style="display:inline-block;font:600 11px/1 {L.FONTE};color:{cor};background:{fundo};'
             f'padding:4px 8px;border-radius:10px">{L.esc(texto)}</span>'
             + (f'<span style="font:500 12px/1 {L.FONTE};color:{L.CINZA}">&nbsp;&nbsp;{L.esc(kw)}</span>' if kw else "")
-            + f'</div><div style="font:600 14px/1.4 {L.FONTE};color:{L.MARINHO}">{tit}</div>'
+            + f'</div><div style="font:600 14px/1.4 {L.FONTE};color:#4A4A4A">{tit}</div>'
             + (f'<div style="font:400 13px/1.5 {L.FONTE};color:{L.CINZA};padding-top:3px">'
                f'Motivo: {L.esc(_truncate(just, 110))}</div>' if just else "")
             + '</div>')
@@ -1488,10 +1489,11 @@ def _bloco_conferir(items: list[dict], limite: int) -> str:
         f'<tr><td style="padding:24px 40px 0">'
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         f'style="background:{L.GELO};border-radius:8px"><tr><td style="padding:18px 20px 8px">'
-        f'<div style="font:700 14px/1.4 {L.FONTE};color:{L.MARINHO}">'
-        f'Para conferir: a IA marcou como fora do tema ({len(items)})</div>'
+        f'<div style="font:700 14px/1.4 {L.FONTE};color:#4A4A4A">'
+        f'Provável lixo ({len(items)})</div>'
         f'<div style="font:400 12px/1.5 {L.FONTE};color:{L.CINZA};padding:2px 0 6px">'
-        f'Se algum destes atos importa para o cliente, avise a equipe de Dados.</div>'
+        f'A IA achou que estes atos não têm relação com o cliente. '
+        f'Se algum importa, avise a equipe de Dados.</div>'
         f'{linhas}</td></tr></table></td></tr>'
     )
 
@@ -1553,13 +1555,17 @@ def _build_html_email_clientes(
     total = sum(len(v) for v in inserted_clientes.values())
     clientes = sorted(((c, v) for c, v in inserted_clientes.items() if v),
                       key=lambda kv: len(kv[1]), reverse=True)
+    if CONFERIR_COMPACTO:   # quem tem mais ato relevante vem primeiro
+        clientes.sort(key=lambda kv: (sum(1 for it in kv[1] if not _fora_do_alinhamento(it)),
+                                      len(kv[1])), reverse=True)
     n_conferir = sum(1 for v in inserted_clientes.values() for it in v if _fora_do_alinhamento(it))
 
     corpo = ""
     for cliente, items in clientes:
-        corpo += L.secao(cliente, len(items))
         principais = [it for it in items if not _fora_do_alinhamento(it)]
         conferir = [it for it in items if _fora_do_alinhamento(it)]
+        # No formato enxuto o número do cliente (e do sumário) conta só o relevante.
+        corpo += L.secao(cliente, len(principais) if CONFERIR_COMPACTO else len(items))
         grouped: dict[str, list[dict]] = {}
         for it in principais:
             k = (it.get("keyword") or "").strip() or "-"
@@ -1569,6 +1575,9 @@ def _build_html_email_clientes(
             if kws_join != "-":
                 corpo += L.subsecao(" · ".join(k.strip() for k in kws_join.split(";") if k.strip()))
             corpo += _itens_dou(its_sorted, 30)
+        if CONFERIR_COMPACTO and not principais and conferir:
+            corpo += (f'<tr><td style="padding:12px 40px 0;font:500 14px/1.5 {L.FONTE};color:{L.CINZA}">'
+                      f'Nada relevante para o cliente nesta edição.</td></tr>')
         # Desde 16/11/2026 o DOU não apaga o Não Alinha: o item vem no fim do
         # cliente, com a justificativa do modelo, para a equipe conferir.
         if conferir:
@@ -1580,9 +1589,16 @@ def _build_html_email_clientes(
                 corpo += L.subsecao(f"Para conferir: o modelo marcou como fora ({len(conferir)})")
                 corpo += _itens_conferir(conferir, 40)
 
-    nums = [(total, "atos novos"), (len(clientes), "clientes")]
-    if n_conferir:
-        nums.append((n_conferir, "para conferir"))
+    if CONFERIR_COMPACTO:
+        # Relevante = o modelo marcou Alinha/Parcial ou ainda não classificou,
+        # seja o ato favorável ou contrário ao cliente.
+        n_rel = total - n_conferir
+        nums = [(n_rel, "relevante" if n_rel == 1 else "relevantes"), (n_conferir, "provável lixo"),
+                (len(clientes), "clientes")]
+    else:
+        nums = [(total, "atos novos"), (len(clientes), "clientes")]
+        if n_conferir:
+            nums.append((n_conferir, "para conferir"))
     return L.pagina(
         "DOU · Clientes", titulo, subtitulo, corpo,
         nums=nums,
