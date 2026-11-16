@@ -1492,7 +1492,7 @@ def _bloco_conferir(items: list[dict], limite: int) -> str:
         f'<div style="font:700 14px/1.4 {L.FONTE};color:#4A4A4A">'
         f'Provável lixo ({len(items)})</div>'
         f'<div style="font:400 12px/1.5 {L.FONTE};color:{L.CINZA};padding:2px 0 6px">'
-        f'A IA achou que estes atos não têm relação com o cliente. '
+        f'Atos que não parecem ter relação com o cliente. '
         f'Se algum importa, avise a equipe de Dados.</div>'
         f'{linhas}</td></tr></table></td></tr>'
     )

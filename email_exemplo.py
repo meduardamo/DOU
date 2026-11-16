@@ -50,7 +50,10 @@ def main(para: str) -> None:
     dia = ultima.strftime("%d/%m/%Y")
     html = D._build_html_email_clientes(por_cliente, plan_id, "Edição Regular", dia)
     total = sum(len(v) for v in por_cliente.values())
-    D._send_email(f"[EXEMPLO] DOU Regular - {dia} | Clientes: {total}", html, [para])
+    # Hora no assunto: o Gmail não junta os exemplos numa conversa só (na conversa
+    # ele esconde com "..." o trecho igual ao email anterior).
+    hora = D.now_br().strftime("%Hh%M")
+    D._send_email(f"[EXEMPLO {hora}] DOU Regular - {dia} | Clientes: {total}", html, [para])
 
 
 if __name__ == "__main__":
