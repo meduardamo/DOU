@@ -44,7 +44,9 @@ def main(para: str) -> None:
         por_cliente.setdefault(r[c.index("Cliente")], []).append({
             "keyword": r[c.index("Palavra-chave")], "title": r[c.index("Portaria")],
             "href": r[c.index("Link")], "abstract": r[c.index("Resumo")],
-            "secao": r[c.index("Seção")]})
+            "secao": r[c.index("Seção")],
+            "alinhamento": r[c.index("Alinhamento")] if "Alinhamento" in c else "",
+            "justificativa": r[c.index("Justificativa")] if "Justificativa" in c else ""})
     dia = ultima.strftime("%d/%m/%Y")
     html = D._build_html_email_clientes(por_cliente, plan_id, "Edição Regular", dia)
     total = sum(len(v) for v in por_cliente.values())

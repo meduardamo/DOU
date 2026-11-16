@@ -9,6 +9,10 @@ on:
         description: "Endereço que recebe o exemplo"
         required: true
         default: "mariaeduarda.marques@eixoestrategia.com"
+      compacto:
+        description: "Bloco Para conferir no formato enxuto (título + motivo)"
+        required: false
+        default: "1"
 
 jobs:
   exemplo:
@@ -25,4 +29,5 @@ jobs:
           EMAIL: ${{ secrets.EMAIL }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           PARA: ${{ github.event.inputs.para }}
+          DOU_CONFERIR_COMPACTO: ${{ github.event.inputs.compacto }}
         run: python email_exemplo.py "$PARA"

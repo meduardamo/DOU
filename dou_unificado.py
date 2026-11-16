@@ -1446,10 +1446,33 @@ def _fora_do_alinhamento(it: dict) -> bool:
     return a.startswith("nao")
 
 
+CONFERIR_COMPACTO = os.getenv("DOU_CONFERIR_COMPACTO", "").strip().lower() in ("1", "true", "sim")
+
+
 def _itens_conferir(items: list[dict], limite: int) -> str:
-    """Itens que o modelo tirou: rótulo com a classificação, justificativa embaixo."""
+    """Itens que o modelo tirou: rótulo com a classificação, justificativa embaixo.
+    Compacto: só o título com link e uma linha com classificação, palavra e motivo."""
     import email_layout as L
     linhas = ""
+    if CONFERIR_COMPACTO:
+        for it in items[:limite]:
+            motivo = " · ".join(x for x in ((it.get("alinhamento") or "").strip(),
+                                            (it.get("keyword") or "").strip()) if x)
+            just = (it.get("justificativa") or "").strip()
+            if just:
+                motivo += f": {_truncate(just, 160)}"
+            tit = L.esc(_titulo_dou(it.get("title") or "(sem título)"))
+            href = it.get("href") or ""
+            if href.startswith("http"):
+                tit = f'<a href="{L.esc(href)}" style="color:{L.MARINHO};text-decoration:none">{tit}</a>'
+            linhas += (f'<tr><td style="padding:0 40px"><div style="padding:10px 0;border-bottom:1px solid {L.FILETE}">'
+                       f'<div style="font:600 14px/1.4 {L.FONTE};color:{L.MARINHO}">{tit}</div>'
+                       f'<div style="font:500 12px/1.5 {L.FONTE};color:{L.CINZA};padding-top:2px">{L.esc(motivo)}</div>'
+                       f'</div></td></tr>')
+        if len(items) > limite:
+            linhas += (f'<tr><td style="padding:14px 40px;font:500 12px/1.5 {L.FONTE};color:{L.CINZA}">'
+                       f'Mais {len(items) - limite} na planilha.</td></tr>')
+        return linhas
     for it in items[:limite]:
         meta = " · ".join(x for x in ((it.get("secao") or "").strip(),
                                       (it.get("keyword") or "").strip()) if x)
