@@ -837,6 +837,38 @@ _TRECHOS_IGNORADOS_POR_KW = {
         r"|militar|do\s+exercito|da\s+marinha|da\s+aeronautica"
         r")\b"
     ),
+    # Regime de trabalho de professor e servidor (40 horas, dedicação
+    # exclusiva, afastamento). Medido em 16/11/2026 na aba ISG: tira 180 de
+    # 185 linhas de ruído e 2 de 23 alinhadas (editais de concurso docente).
+    "tempo integral": re.compile(
+        r"\bregime\s+de\s+(?:trabalho\s+(?:de|em)\s+)?tempo\s+integral\b"
+        r"|\bhoras\s+semanais\s+em\s+tempo\s+integral\b"
+        r"|\bquarenta\s+(?:horas\s+)?em\s+tempo\s+integral\b"
+        r"|\btempo\s+integral\s+(?:com|sem)\s+dedicacao\s+exclusiva\b"
+        r"|\bafastamento\s+em\s+tempo\s+integral\b"
+    ),
+    # Cota de seleção ("egressos do ensino médio", "ter cursado o ensino
+    # médio em escola pública"), nome de diretoria de instituto federal e
+    # curso técnico citado em designação de função (FUC/FCC/CD). Medido em
+    # 16/11/2026: IU 188 -> 104 de ruído sem perder alinhada; ISG 175 -> 96,
+    # perde 2 designações de instituto federal. "Conclusão do ensino médio" e
+    # "ensino médio completo" ficaram de fora: derrubavam decreto e portarias
+    # alinhadas.
+    "ensino médio": re.compile(
+        r"\begressos?\s+do\s+ensino\s+medio\b"
+        r"|\bcursado\s+(?:integralmente\s+)?o\s+ensino\s+medio\b"
+        r"|\b(?:diretoria|departamento|coordenacao|coordenadoria)\s+de\s+ensino\s+medio\s+e\s+tecnico\b"
+        r"|\b(?:integrado|subsequente)\s+ao\s+ensino\s+medio(?=\s+(?:fuc|fcc|fg|cd|codigo|do\s+campus)\b)"
+    ),
+    # Só expressões que nunca vinham em linha alinhada (IDEC, 16/11/2026:
+    # 743 -> 601 de ruído, 0 alinhada perdida). "Na internet" solto ficou de
+    # fora: tiraria 80 de 127 alinhadas (resolução da ANS, consulta pública
+    # da Anatel e do CMN que só casaram por citar o site).
+    "internet": re.compile(
+        r"\bsistemas\s+para\s+internet\b"
+        r"|\bcarf\s+na\s+internet\b"
+        r"|\batas?\s+na\s+internet\b"
+    ),
 }
 
 
