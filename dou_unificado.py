@@ -1448,6 +1448,53 @@ def _fora_do_alinhamento(it: dict) -> bool:
 
 CONFERIR_COMPACTO = os.getenv("DOU_CONFERIR_COMPACTO", "").strip().lower() in ("1", "true", "sim")
 
+# Classificação do modelo em palavras da equipe: (texto da etiqueta, cor, fundo).
+_ETIQUETA_CONFERIR = {
+    "nao alinha": ("Fora do tema", "#962E4D", "#F3E3E8"),
+    "nao se aplica": ("Ato de rotina", "#5F5F5F", "#E4E2DB"),
+}
+
+
+def _bloco_conferir(items: list[dict], limite: int) -> str:
+    """Bloco em fundo gelo, separado da lista principal: o que a IA tirou,
+    com etiqueta (Fora do tema / Ato de rotina), título e motivo numa linha."""
+    import email_layout as L
+    linhas = ""
+    for k, it in enumerate(items[:limite]):
+        chave = _normalize(it.get("alinhamento") or "").strip()
+        texto, cor, fundo = _ETIQUETA_CONFERIR.get(chave, ((it.get("alinhamento") or "Fora").strip(),
+                                                            L.CINZA, "#E4E2DB"))
+        kw = (it.get("keyword") or "").strip()
+        tit = L.esc(_titulo_dou(it.get("title") or "(sem título)"))
+        href = it.get("href") or ""
+        if href.startswith("http"):
+            tit = f'<a href="{L.esc(href)}" style="color:{L.MARINHO};text-decoration:none">{tit}</a>'
+        just = (it.get("justificativa") or "").strip()
+        fio = f"border-top:1px solid #E1DED6;" if k else ""
+        linhas += (
+            f'<div style="padding:12px 0;{fio}">'
+            f'<div style="padding-bottom:5px">'
+            f'<span style="display:inline-block;font:600 11px/1 {L.FONTE};color:{cor};background:{fundo};'
+            f'padding:4px 8px;border-radius:10px">{L.esc(texto)}</span>'
+            + (f'<span style="font:500 12px/1 {L.FONTE};color:{L.CINZA}">&nbsp;&nbsp;{L.esc(kw)}</span>' if kw else "")
+            + f'</div><div style="font:600 14px/1.4 {L.FONTE};color:{L.MARINHO}">{tit}</div>'
+            + (f'<div style="font:400 13px/1.5 {L.FONTE};color:{L.CINZA};padding-top:3px">'
+               f'Motivo: {L.esc(_truncate(just, 110))}</div>' if just else "")
+            + '</div>')
+    if len(items) > limite:
+        linhas += (f'<div style="padding:10px 0 0;border-top:1px solid #E1DED6;font:500 12px/1.5 {L.FONTE};'
+                   f'color:{L.CINZA}">Mais {len(items) - limite} na planilha.</div>')
+    return (
+        f'<tr><td style="padding:24px 40px 0">'
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        f'style="background:{L.GELO};border-radius:8px"><tr><td style="padding:18px 20px 8px">'
+        f'<div style="font:700 14px/1.4 {L.FONTE};color:{L.MARINHO}">'
+        f'Para conferir: a IA marcou como fora do tema ({len(items)})</div>'
+        f'<div style="font:400 12px/1.5 {L.FONTE};color:{L.CINZA};padding:2px 0 6px">'
+        f'Se algum destes atos importa para o cliente, avise a equipe de Dados.</div>'
+        f'{linhas}</td></tr></table></td></tr>'
+    )
+
 
 def _itens_conferir(items: list[dict], limite: int) -> str:
     """Itens que o modelo tirou: rótulo com a classificação, justificativa embaixo.
@@ -1456,19 +1503,23 @@ def _itens_conferir(items: list[dict], limite: int) -> str:
     linhas = ""
     if CONFERIR_COMPACTO:
         for it in items[:limite]:
-            motivo = " · ".join(x for x in ((it.get("alinhamento") or "").strip(),
-                                            (it.get("keyword") or "").strip()) if x)
+            # Classificação em vinho acima do título (como o rótulo do formato
+            # completo), palavra-chave em cinza ao lado; motivo numa linha só.
+            classif = L.esc((it.get("alinhamento") or "").strip())
+            kw = L.esc((it.get("keyword") or "").strip())
+            rotulo = (f'<span style="color:{L.VINHO}">{classif}</span>'
+                      + (f'<span style="color:{L.CINZA};font-weight:500"> · {kw}</span>' if kw else ""))
             just = (it.get("justificativa") or "").strip()
-            if just:
-                motivo += f": {_truncate(just, 160)}"
             tit = L.esc(_titulo_dou(it.get("title") or "(sem título)"))
             href = it.get("href") or ""
             if href.startswith("http"):
                 tit = f'<a href="{L.esc(href)}" style="color:{L.MARINHO};text-decoration:none">{tit}</a>'
-            linhas += (f'<tr><td style="padding:0 40px"><div style="padding:10px 0;border-bottom:1px solid {L.FILETE}">'
+            linhas += (f'<tr><td style="padding:0 40px"><div style="padding:12px 0;border-bottom:1px solid {L.FILETE}">'
+                       f'<div style="font:600 12px/1.4 {L.FONTE};padding-bottom:3px">{rotulo}</div>'
                        f'<div style="font:600 14px/1.4 {L.FONTE};color:{L.MARINHO}">{tit}</div>'
-                       f'<div style="font:500 12px/1.5 {L.FONTE};color:{L.CINZA};padding-top:2px">{L.esc(motivo)}</div>'
-                       f'</div></td></tr>')
+                       + (f'<div style="font:400 13px/1.5 {L.FONTE};color:{L.CINZA};padding-top:3px">'
+                          f'{L.esc(_truncate(just, 110))}</div>' if just else "")
+                       + '</div></td></tr>')
         if len(items) > limite:
             linhas += (f'<tr><td style="padding:14px 40px;font:500 12px/1.5 {L.FONTE};color:{L.CINZA}">'
                        f'Mais {len(items) - limite} na planilha.</td></tr>')
@@ -1521,10 +1572,13 @@ def _build_html_email_clientes(
         # Desde 16/11/2026 o DOU não apaga o Não Alinha: o item vem no fim do
         # cliente, com a justificativa do modelo, para a equipe conferir.
         if conferir:
-            corpo += L.subsecao(f"Para conferir: o modelo marcou como fora ({len(conferir)})")
             conferir.sort(key=lambda x: ((x.get("alinhamento") or ""), (x.get("secao") or ""),
                                          (x.get("title") or "")))
-            corpo += _itens_conferir(conferir, 40)
+            if CONFERIR_COMPACTO:
+                corpo += _bloco_conferir(conferir, 40)
+            else:
+                corpo += L.subsecao(f"Para conferir: o modelo marcou como fora ({len(conferir)})")
+                corpo += _itens_conferir(conferir, 40)
 
     nums = [(total, "atos novos"), (len(clientes), "clientes")]
     if n_conferir:
