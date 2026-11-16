@@ -822,6 +822,23 @@ for _cli, _kws in CLIENT_KEYWORDS.items():
         if _pat:
             CLIENT_PATTERNS.append((_pat, _cli, _kw))
 
+# Trechos apagados do texto antes de procurar uma palavra-chave específica.
+# "magistério" é nome de carreira federal (Lei 12.772) e aparece em todo ato
+# de pessoal de universidade e instituto federal; medido de 27/07 a 28/10/2026,
+# 3.053 casamentos com IU, todos ruído. O nome da carreira sai; "magistério"
+# em qualquer outro contexto (piso, valorização) continua casando.
+_TRECHOS_IGNORADOS_POR_KW = {
+    "magistério": re.compile(
+        r"\bmagisterio\s+(?:"
+        # O resumo do DOU vem cortado ("magistério superi…", "magistério s…").
+        r"s(?:u(?:p(?:e(?:r(?:i(?:o(?:r)?)?)?)?)?)?)?"
+        r"|do\s+ensino\s+basico(?:\s+tecnico\s+e\s+tecnologico|\s+federal|\s+dos\s+ex\s+territorios)?"
+        r"|federal"
+        r"|militar|do\s+exercito|da\s+marinha|da\s+aeronautica"
+        r")\b"
+    ),
+}
+
 
 def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "secao") -> dict[str, list]:
     if not conteudo_raspado or "jsonArray" not in conteudo_raspado:
@@ -866,7 +883,11 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
 
         hits = []
         for pat, cliente, kw in CLIENT_PATTERNS:
-            if not pat.search(texto_norm):
+            texto_kw = texto_norm
+            ignorar = _TRECHOS_IGNORADOS_POR_KW.get(kw.strip().lower())
+            if ignorar:
+                texto_kw = ignorar.sub(" ", texto_norm)
+            if not pat.search(texto_kw):
                 continue
             hits.append((cliente, kw))
 
