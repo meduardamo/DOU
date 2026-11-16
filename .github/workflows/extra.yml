@@ -62,6 +62,7 @@ jobs:
           DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           DOU_DATE: ${{ github.event.inputs.data }}  # backfill dd-mm-aaaa; vazio = hoje
+          DOU_EMAIL_PENDENTE: email_pendente.json  # email sai no último passo, depois do alinhamento
           DOU_SEM_EMAIL: ${{ github.event.inputs.sem_email }}
         # Sem data: hoje e ontem. A extra costuma sair depois das 21h e o cron
         # das 23h atrasa para depois da meia-noite, quando "hoje" já virou.
@@ -74,9 +75,26 @@ jobs:
           fi
 
       - name: Run DOU alignment (per client tabs)
+        continue-on-error: true  # se o Gemini falhar, o email sai sem a separação
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
           PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python alinhamento_dou.py
+
+      # Desde 16/11/2026 o email sai aqui, com o alinhamento já feito: o que o
+      # modelo marcou como Não Alinha ou Não se aplica vai no fim de cada
+      # cliente, em "Para conferir". always(): o email sai mesmo se o
+      # alinhamento falhar.
+      - name: Send DOU email
+        if: always()
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA_CLIENTES: ${{ secrets.PLANILHA_CLIENTES }}
+          EMAIL: ${{ secrets.EMAIL }}
+          DESTINATARIOS: ${{ secrets.DESTINATARIOS }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          DOU_EMAIL_PENDENTE: email_pendente.json
+        run: |
+          python dou_unificado.py enviar_pendente

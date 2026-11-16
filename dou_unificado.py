@@ -1389,6 +1389,33 @@ def _build_html_email_geral(
     )
 
 
+def _fora_do_alinhamento(it: dict) -> bool:
+    """Não Alinha ou Não se aplica. Sem classificação (alinhamento falhou ou
+    não rodou) conta como dentro: na dúvida o item fica na lista principal."""
+    a = _normalize(it.get("alinhamento") or "")
+    return a.startswith("nao")
+
+
+def _itens_conferir(items: list[dict], limite: int) -> str:
+    """Itens que o modelo tirou: rótulo com a classificação, justificativa embaixo."""
+    import email_layout as L
+    linhas = ""
+    for it in items[:limite]:
+        meta = " · ".join(x for x in ((it.get("secao") or "").strip(),
+                                      (it.get("keyword") or "").strip()) if x)
+        just = (it.get("justificativa") or "").strip()
+        extra = (f'<div style="font:500 13px/1.5 {L.FONTE};color:{L.CINZA};padding-top:6px">'
+                 f'Modelo: {L.esc(_truncate(just, 240))}</div>') if just else ""
+        linhas += L.item(_titulo_dou(it.get("title") or "(sem título)"), href=it.get("href") or "",
+                         rotulo=(it.get("alinhamento") or "").strip(), meta=meta,
+                         texto=_truncate(_resumo_dou(it.get("title"), it.get("abstract")), 200),
+                         extra=extra)
+    if len(items) > limite:
+        linhas += (f'<tr><td style="padding:14px 40px;font:500 12px/1.5 {L.FONTE};color:{L.CINZA}">'
+                   f'Mais {len(items) - limite} na planilha.</td></tr>')
+    return linhas
+
+
 def _build_html_email_clientes(
     inserted_clientes: dict[str, list[dict]],
     planilha_clientes_id: str,
@@ -1402,12 +1429,15 @@ def _build_html_email_clientes(
     total = sum(len(v) for v in inserted_clientes.values())
     clientes = sorted(((c, v) for c, v in inserted_clientes.items() if v),
                       key=lambda kv: len(kv[1]), reverse=True)
+    n_conferir = sum(1 for v in inserted_clientes.values() for it in v if _fora_do_alinhamento(it))
 
     corpo = ""
     for cliente, items in clientes:
         corpo += L.secao(cliente, len(items))
+        principais = [it for it in items if not _fora_do_alinhamento(it)]
+        conferir = [it for it in items if _fora_do_alinhamento(it)]
         grouped: dict[str, list[dict]] = {}
-        for it in items:
+        for it in principais:
             k = (it.get("keyword") or "").strip() or "-"
             grouped.setdefault(k, []).append(it)
         for kws_join, its in sorted(grouped.items(), key=lambda kv: len(kv[1]), reverse=True):
@@ -1415,10 +1445,20 @@ def _build_html_email_clientes(
             if kws_join != "-":
                 corpo += L.subsecao(" · ".join(k.strip() for k in kws_join.split(";") if k.strip()))
             corpo += _itens_dou(its_sorted, 30)
+        # Desde 16/11/2026 o DOU não apaga o Não Alinha: o item vem no fim do
+        # cliente, com a justificativa do modelo, para a equipe conferir.
+        if conferir:
+            corpo += L.subsecao(f"Para conferir: o modelo marcou como fora ({len(conferir)})")
+            conferir.sort(key=lambda x: ((x.get("alinhamento") or ""), (x.get("secao") or ""),
+                                         (x.get("title") or "")))
+            corpo += _itens_conferir(conferir, 40)
 
+    nums = [(total, "atos novos"), (len(clientes), "clientes")]
+    if n_conferir:
+        nums.append((n_conferir, "para conferir"))
     return L.pagina(
         "DOU · Clientes", titulo, subtitulo, corpo,
-        nums=[(total, "atos novos"), (len(clientes), "clientes")],
+        nums=nums,
         previa=" · ".join(f"{c} ({len(v)})" for c, v in clientes[:5]),
         botoes=[("Abrir a planilha de clientes", _gs_tab_url(planilha_clientes_id, None))],
     )
@@ -1445,6 +1485,56 @@ def _send_email(subject: str, html_body: str, recipients: list[str]) -> None:
 
 
 ENVIAR_EMAIL_GERAL = False
+_ENVIANDO_PENDENTE = False
+
+
+def _ler_alinhamento(planilha_clientes_id: str, clientes) -> dict[tuple, tuple[str, str]]:
+    """(cliente, link, palavra-chave) -> (Alinhamento, Justificativa), uma leitura por aba."""
+    out: dict[tuple, tuple[str, str]] = {}
+    sh = _gs_retry("abrir planilha de clientes", _gs_client_from_env().open_by_key,
+                   planilha_clientes_id)
+    for cli in clientes:
+        try:
+            vals = _gs_retry(f"ler aba {cli}", sh.worksheet(cli).get_all_values)
+        except Exception as e:
+            print(f"[{cli}] aviso: não li o alinhamento ({e})")
+            continue
+        if not vals:
+            continue
+        cab = vals[0]
+        try:
+            il, ik = cab.index("Link"), cab.index("Palavra-chave")
+            ia, ij = cab.index("Alinhamento"), cab.index("Justificativa")
+        except ValueError:
+            continue
+        for r in vals[1:]:
+            if len(r) > max(il, ik, ia, ij):
+                out[(cli, r[il].strip(), r[ik].strip())] = (r[ia].strip(), r[ij].strip())
+    return out
+
+
+def enviar_pendente(caminho: str) -> None:
+    """Manda o email que a raspagem deixou na fila, com o alinhamento já feito.
+    Se a leitura falhar, manda sem a separação: o email não pode ficar preso."""
+    global _ENVIANDO_PENDENTE
+    if not caminho or not os.path.exists(caminho):
+        print("Nenhum email na fila.")
+        return
+    with open(caminho, encoding="utf-8") as f:
+        fila = json.load(f)
+    _ENVIANDO_PENDENTE = True
+    for e in fila:
+        ins_c = e.get("inserted_clientes") or {}
+        if ins_c and any(ins_c.values()):
+            try:
+                mapa = _ler_alinhamento(e["planilha_clientes_id"], [c for c, v in ins_c.items() if v])
+                for cli, its in ins_c.items():
+                    for it in its:
+                        a, j = mapa.get((cli, it.get("href", ""), it.get("keyword", "")), ("", ""))
+                        it["alinhamento"], it["justificativa"] = a, j
+            except Exception as ex:
+                print(f"aviso: email sai sem o alinhamento ({ex})")
+        envia_emails_edicao(**e)
 
 
 def envia_emails_edicao(
@@ -1461,6 +1551,27 @@ def envia_emails_edicao(
     if os.getenv("DOU_SEM_EMAIL", "").strip().lower() in ("1", "true", "sim"):
         total_cli = sum(len(v) for v in (inserted_clientes or {}).values())
         print(f"Sem email (DOU_SEM_EMAIL) — {total_cli} linhas novas de clientes só na planilha.")
+        return
+
+    # No GitHub o email espera o alinhamento: a raspagem só deixa o envio na
+    # fila (DOU_EMAIL_PENDENTE = arquivo) e o passo "enviar_pendente", depois
+    # do alinhamento_dou.py, lê a classificação na planilha e manda.
+    pendente = os.getenv("DOU_EMAIL_PENDENTE", "").strip()
+    if pendente and not _ENVIANDO_PENDENTE:
+        fila = []
+        if os.path.exists(pendente):
+            with open(pendente, encoding="utf-8") as f:
+                fila = json.load(f)
+        fila.append({
+            "edicao_label": edicao_label, "subtitulo": subtitulo,
+            "inserted_geral": inserted_geral, "inserted_clientes": inserted_clientes,
+            "planilha_id": planilha_id, "planilha_gid": planilha_gid,
+            "planilha_clientes_id": planilha_clientes_id, "subject_prefix": subject_prefix,
+        })
+        with open(pendente, "w", encoding="utf-8") as f:
+            json.dump(fila, f, ensure_ascii=False)
+        total_cli = sum(len(v) for v in (inserted_clientes or {}).values())
+        print(f"Email na fila ({pendente}): {total_cli} linhas de clientes, sai depois do alinhamento.")
         return
 
     # Email geral desligado em 20/10/2026 (decisão dela): só o de clientes sai.
@@ -1567,5 +1678,7 @@ if __name__ == "__main__":
         executar_extra()
         ontem = (now_br() - timedelta(days=1)).strftime("%d-%m-%Y")
         executar_extra(data=ontem)
+    elif modo == "enviar_pendente":
+        enviar_pendente(os.getenv("DOU_EMAIL_PENDENTE", "").strip())
     else:
         executar_tudo()

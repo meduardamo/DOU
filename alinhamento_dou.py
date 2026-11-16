@@ -332,10 +332,16 @@ def process_sheet(ws) -> None:
     _limpar_nao_alinha(ws, df)
 
 
+# Desde 16/11/2026 (decisão dela) o DOU não apaga o Não Alinha: o item fica na
+# planilha e vai no fim do email, em "Para conferir", para a equipe avaliar.
+# Para voltar a apagar, True.
+APAGAR_NAO_ALINHA = False
+
+
 def _limpar_nao_alinha(ws, df) -> None:
     """Apaga as linhas "Não Alinha" e guarda o link na aba _descartadas.
     O df é o retrato da aba (linha 2 em diante), na mesma ordem."""
-    if COL_ALINH not in df.columns:
+    if not APAGAR_NAO_ALINHA or COL_ALINH not in df.columns:
         return
     nao = [i for i, v in enumerate(df[COL_ALINH].astype(str).str.strip().str.lower())
            if v in ("não alinha", "nao alinha")]
