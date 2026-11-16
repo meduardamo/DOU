@@ -1615,10 +1615,14 @@ def _build_html_email_clientes(
                 corpo += _itens_conferir(conferir, 40)
 
     if CONFERIR_COMPACTO:
+        # Logo abaixo do sumário (corpo começa ali), onde a equipe olha primeiro.
         if sem_relevante:
-            lista = ", ".join(sem_relevante[:-1]) + (" e " if len(sem_relevante) > 1 else "") + sem_relevante[-1]
-            corpo += (f'<tr><td style="padding:32px 40px 0;font:500 14px/1.6 {L.FONTE};color:{L.CINZA}">'
-                      f'Nada relevante nesta edição para {L.esc(lista)}.</td></tr>')
+            nomes = ' <span style="color:#B5B2AA">·</span> '.join(L.esc(c) for c in sem_relevante)
+            corpo = (f'<tr><td style="padding:24px 40px 0">'
+                     f'<div style="font:700 14px/1.4 {L.FONTE};color:{L.MARINHO};padding-bottom:6px">'
+                     f'Sem atos relevantes nesta edição</div>'
+                     f'<div style="font:600 14px/1.6 {L.FONTE};color:{L.TINTA}">{nomes}</div>'
+                     f'</td></tr>') + corpo
         corpo += _anexo_descartados(descartados, 20)
         # Relevante = o modelo marcou Alinha/Parcial ou ainda não classificou,
         # seja o ato favorável ou contrário ao cliente.
