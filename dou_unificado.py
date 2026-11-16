@@ -1582,10 +1582,17 @@ def _build_html_email_clientes(
 
     corpo = ""
     descartados: list[tuple[str, list[dict]]] = []
+    sem_relevante: list[str] = []
     for cliente, items in clientes:
         principais = [it for it in items if not _fora_do_alinhamento(it)]
         conferir = [it for it in items if _fora_do_alinhamento(it)]
         # No formato enxuto o número do cliente (e do sumário) conta só o relevante.
+        # Cliente sem nada relevante não ganha seção: entra na linha única
+        # "Nada relevante nesta edição para ..." antes do anexo.
+        if CONFERIR_COMPACTO and not principais:
+            sem_relevante.append(cliente)
+            descartados.append((cliente, conferir))
+            continue
         corpo += L.secao(cliente, len(principais) if CONFERIR_COMPACTO else len(items))
         grouped: dict[str, list[dict]] = {}
         for it in principais:
@@ -1596,9 +1603,6 @@ def _build_html_email_clientes(
             if kws_join != "-":
                 corpo += L.subsecao(" · ".join(k.strip() for k in kws_join.split(";") if k.strip()))
             corpo += _itens_dou(its_sorted, 30)
-        if CONFERIR_COMPACTO and not principais and conferir:
-            corpo += (f'<tr><td style="padding:12px 40px 0;font:500 14px/1.5 {L.FONTE};color:{L.CINZA}">'
-                      f'Nada relevante para o cliente nesta edição.</td></tr>')
         # Desde 16/11/2026 o DOU não apaga o Não Alinha: o item vem no fim do
         # cliente, com a justificativa do modelo, para a equipe conferir.
         if conferir:
@@ -1611,6 +1615,10 @@ def _build_html_email_clientes(
                 corpo += _itens_conferir(conferir, 40)
 
     if CONFERIR_COMPACTO:
+        if sem_relevante:
+            lista = ", ".join(sem_relevante[:-1]) + (" e " if len(sem_relevante) > 1 else "") + sem_relevante[-1]
+            corpo += (f'<tr><td style="padding:32px 40px 0;font:500 14px/1.6 {L.FONTE};color:{L.CINZA}">'
+                      f'Nada relevante nesta edição para {L.esc(lista)}.</td></tr>')
         corpo += _anexo_descartados(descartados, 20)
         # Relevante = o modelo marcou Alinha/Parcial ou ainda não classificou,
         # seja o ato favorável ou contrário ao cliente.
