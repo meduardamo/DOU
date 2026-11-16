@@ -827,6 +827,53 @@ for _cli, _kws in CLIENT_KEYWORDS.items():
 # de pessoal de universidade e instituto federal; medido de 27/07 a 28/10/2026,
 # 3.053 casamentos com IU, todos ruído. O nome da carreira sai; "magistério"
 # em qualquer outro contexto (piso, valorização) continua casando.
+# Rotina administrativa que nunca alinha com cliente, reconhecida pelo título e
+# pelo resumo, antes de baixar o ato. Medido em 16/11/2026 nas abas de cliente
+# (06/08 a 16/11, 9.241 atos por link, 1.295 alinhados para algum cliente):
+# as sete regras juntas tiram 5.284 dos 7.946 atos de ruído e tocam 47
+# alinhados, todos lidos e de rotina (afastamento para evento, designação de
+# coordenador de curso, cessão de servidor). Só para a busca por cliente.
+_ROTINA_ASSINANTE = re.compile(
+    r"^(?:o|a)\s+(?:"
+    r"(?:vice\s+|pro\s+)?reitora?\b"                                   # 3.426 / 17
+    r"|decan[oa]\b"
+    r"|subsecretari[oa]\s+de\s+assuntos\s+administrativos\b"          # 259 / 6
+    r"|presidente\s+do\s+fundo\s+nacional\s+de\s+desenvolvimento\s+da\s+educacao\b"  # 138 / 0
+    r")"
+)
+_ROTINA_GESTAO_PESSOAS = re.compile(r"^(?:o|a)\s+[a-z ]{0,80}?\bgestao\s+de\s+pessoas\b")  # 801 / 3
+_ROTINA_AFASTAMENTO = re.compile(r"\bautoriza\w*\s+(?:o\s+)?afastamento\s+do\s+pais\b")   # +155 / 19
+_ROTINA_EDITAL_DOCENTE = re.compile(                                                     # +85 / 1
+    r"\bprofessora?\s+(?:substitut[oa]|visitante)\b"
+    r"|\bconcurso\s+publico\s+de\s+provas\s+e\s+titulos\s+para\s+(?:o\s+)?(?:provimento\s+de\s+)?"
+    r"(?:cargos?\s+)?(?:de\s+)?professor"
+)
+# Designação para colegiado (Comitê Nacional de Prevenção, conselhos) alinhou
+# com Umane e Infinis: portaria de pessoal e afastamento que citem colegiado ficam.
+_ROTINA_COLEGIADO = re.compile(
+    r"\b(?:comite|conselho|comissao|grupo\s+de\s+trabalho|grupo\s+permanente|"
+    r"camara\s+tecnica|forum|conanda|cnas|cns)\b"
+)
+
+
+def _is_rotina_administrativa(titulo: str, resumo: str) -> bool:
+    t = _normalize_ws(titulo)
+    r = _normalize_ws(resumo)
+    if t and r.startswith(t):
+        r = r[len(t):].strip()   # o resumo do DOU começa repetindo o título
+    if _ROTINA_ASSINANTE.search(r) or _ROTINA_GESTAO_PESSOAS.search(r[:140]):
+        return True
+    colegiado = bool(_ROTINA_COLEGIADO.search(f"{t} {r}"))
+    if t.startswith("portaria de pessoal") and not colegiado:                 # 940 / ~20
+        return True
+    if _ROTINA_AFASTAMENTO.search(r[:400]) and not colegiado:
+        return True
+    if (t.startswith("edital") and _ROTINA_EDITAL_DOCENTE.search(r[:500])
+            and "formacao continuada" not in r[:500]):
+        return True
+    return False
+
+
 _TRECHOS_IGNORADOS_POR_KW = {
     "magistério": re.compile(
         r"\bmagisterio\s+(?:"
@@ -896,6 +943,9 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
             continue
 
         if not eh_secao_3 and _is_blocked(titulo + " " + resumo):
+            continue
+
+        if _is_rotina_administrativa(titulo, resumo):
             continue
 
         titulo_resumo_norm = _normalize_ws(titulo + " " + resumo)
