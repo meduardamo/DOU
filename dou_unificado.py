@@ -1458,9 +1458,8 @@ _ETIQUETA_CONFERIR = {
 }
 
 
-def _bloco_conferir(items: list[dict], limite: int) -> str:
-    """Bloco em fundo gelo, separado da lista principal: o que a IA tirou,
-    com etiqueta (Fora do tema / Ato de rotina), título e motivo numa linha."""
+def _linhas_descartados(items: list[dict], limite: int) -> str:
+    """Atos descartados de um cliente: etiqueta, palavra-chave, título e motivo numa linha."""
     import email_layout as L
     linhas = ""
     for k, it in enumerate(items[:limite]):
@@ -1473,7 +1472,7 @@ def _bloco_conferir(items: list[dict], limite: int) -> str:
         if href.startswith("http"):
             tit = f'<a href="{L.esc(href)}" style="color:#4A4A4A;text-decoration:none">{tit}</a>'
         just = (it.get("justificativa") or "").strip()
-        fio = f"border-top:1px solid #E1DED6;" if k else ""
+        fio = "border-top:1px solid #E1DED6;" if k else ""
         linhas += (
             f'<div style="padding:12px 0;{fio}">'
             f'<div style="padding-bottom:5px">'
@@ -1487,16 +1486,35 @@ def _bloco_conferir(items: list[dict], limite: int) -> str:
     if len(items) > limite:
         linhas += (f'<div style="padding:10px 0 0;border-top:1px solid #E1DED6;font:500 12px/1.5 {L.FONTE};'
                    f'color:{L.CINZA}">Mais {len(items) - limite} na planilha.</div>')
+    return linhas
+
+
+def _anexo_descartados(por_cliente: list[tuple[str, list[dict]]], limite: int) -> str:
+    """Anexo no fim do email: o descartado de todos os clientes, numa caixa
+    gelo só, agrupado por cliente. Fica depois da parte útil para quem lê
+    parar antes; o Gmail não aceita bloco de abrir e fechar."""
+    import email_layout as L
+    por_cliente = [(c, its) for c, its in por_cliente if its]
+    if not por_cliente:
+        return ""
+    total = sum(len(its) for _, its in por_cliente)
+    grupos = ""
+    for n, (cli, its) in enumerate(por_cliente):
+        topo = "padding-top:18px;" if n else "padding-top:8px;"
+        grupos += (f'<div style="{topo}font:700 12px/1.4 {L.FONTE};color:#4A4A4A;letter-spacing:1px;'
+                   f'text-transform:uppercase">{L.esc(cli)} &nbsp;<span style="color:{L.CINZA};'
+                   f'font-weight:600">{len(its)}</span></div>'
+                   + _linhas_descartados(its, limite))
     return (
-        f'<tr><td style="padding:24px 40px 0">'
+        f'<tr><td style="padding:48px 40px 0"><div style="border-top:1px solid {L.FILETE}"></div></td></tr>'
+        f'<tr><td style="padding:28px 40px 0">'
+        f'<div style="font:700 18px/1.3 {L.FONTE};color:#4A4A4A">Descartados na triagem'
+        f'<span style="font:600 14px/1 {L.FONTE};color:{L.CINZA}"> &nbsp;{total}</span></div>'
+        f'<div style="font:400 13px/1.5 {L.FONTE};color:{L.CINZA};padding:4px 0 14px">'
+        f'Atos que não parecem ter relação com o cliente. Se algum importa, avise a equipe de Dados.</div>'
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        f'style="background:{L.GELO};border-radius:8px"><tr><td style="padding:18px 20px 8px">'
-        f'<div style="font:700 14px/1.4 {L.FONTE};color:#4A4A4A">'
-        f'Provável lixo ({len(items)})</div>'
-        f'<div style="font:400 12px/1.5 {L.FONTE};color:{L.CINZA};padding:2px 0 6px">'
-        f'Atos que não parecem ter relação com o cliente. '
-        f'Se algum importa, avise a equipe de Dados.</div>'
-        f'{linhas}</td></tr></table></td></tr>'
+        f'style="background:{L.GELO};border-radius:8px"><tr><td style="padding:10px 20px 8px">'
+        f'{grupos}</td></tr></table></td></tr>'
     )
 
 
@@ -1563,6 +1581,7 @@ def _build_html_email_clientes(
     n_conferir = sum(1 for v in inserted_clientes.values() for it in v if _fora_do_alinhamento(it))
 
     corpo = ""
+    descartados: list[tuple[str, list[dict]]] = []
     for cliente, items in clientes:
         principais = [it for it in items if not _fora_do_alinhamento(it)]
         conferir = [it for it in items if _fora_do_alinhamento(it)]
@@ -1586,16 +1605,17 @@ def _build_html_email_clientes(
             conferir.sort(key=lambda x: ((x.get("alinhamento") or ""), (x.get("secao") or ""),
                                          (x.get("title") or "")))
             if CONFERIR_COMPACTO:
-                corpo += _bloco_conferir(conferir, 40)
+                descartados.append((cliente, conferir))
             else:
                 corpo += L.subsecao(f"Para conferir: o modelo marcou como fora ({len(conferir)})")
                 corpo += _itens_conferir(conferir, 40)
 
     if CONFERIR_COMPACTO:
+        corpo += _anexo_descartados(descartados, 20)
         # Relevante = o modelo marcou Alinha/Parcial ou ainda não classificou,
         # seja o ato favorável ou contrário ao cliente.
         n_rel = total - n_conferir
-        nums = [(n_rel, "relevante" if n_rel == 1 else "relevantes"), (n_conferir, "provável lixo"),
+        nums = [(n_rel, "relevante" if n_rel == 1 else "relevantes"), (n_conferir, "descartados na triagem"),
                 (len(clientes), "clientes")]
     else:
         nums = [(total, "atos novos"), (len(clientes), "clientes")]
