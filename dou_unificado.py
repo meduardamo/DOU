@@ -999,6 +999,7 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
                     "abstract": resumo,
                     "content_page": conteudo_pagina or "",
                     "secao": secao,
+                    "orgao": (r.get("hierarchyStr", "") or "").strip(),
                 }
             agreg[key]["kws"].add(kw)
 
@@ -1016,6 +1017,7 @@ def procura_termos_clientes(conteudo_raspado: dict | None, campo_secao: str = "s
             "",
             "",
             d["secao"],
+            d["orgao"],
         ])
 
     return por_cliente
@@ -1045,7 +1047,10 @@ def _gs_client_from_env():
 
 
 COLS_GERAL = ["Data", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Seção"]
-COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção"]
+# Órgão (hierarchyStr da listagem do in.gov.br) fica no fim: o alinhamento regrava a aba com as
+# colunas conhecidas primeiro e as extras depois, então a ordem se mantém. A Síntese da Semana
+# (gerador-de-envios) lê o órgão daqui porque o servidor dela não abre a página do ato.
+COLS_CLIENTE = ["Data", "Cliente", "Palavra-chave", "Portaria", "Link", "Resumo", "Conteúdo", "Alinhamento", "Justificativa", "Seção", "Órgão"]
 
 
 def _ws_gid(ws) -> str:
@@ -1268,7 +1273,7 @@ def salva_por_cliente(por_cliente: dict) -> tuple[int, dict, object | None, dict
                 "title":    r[3],
                 "href":     href,
                 "abstract": r[5],
-                "secao":    r[-1] if r else "",
+                "secao":    r[COLS_CLIENTE.index("Seção")] if len(r) > COLS_CLIENTE.index("Seção") else "",
             })
             existing.add(key)
 
