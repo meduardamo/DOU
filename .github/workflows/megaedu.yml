@@ -1,0 +1,58 @@
+name: DOU MegaEdu
+
+# Raspagem própria da MegaEdu. As regras vêm da aba "Regras DOU" da planilha
+# do secret PLANILHA_MEGAEDU_DOU; o que for novo vai para a aba "Atos
+# encontrados" e para o email. Cada rodada lê ontem e hoje (a extra sai à
+# noite); o dedup é pela planilha, então rodar de novo não repete email.
+#
+# Disparo principal: cron-job.org, 06:30 (America/Recife), POST em
+# /repos/meduardamo/DOU/dispatches com {"event_type": "raspar-dou-megaedu"}.
+# O cron abaixo é só reserva: o agendado do GitHub atrasa de 1h a 4h.
+on:
+  repository_dispatch:
+    types: [raspar-dou-megaedu]
+  schedule:
+    - cron: "0 10 * * 1-5" # 07:00 BRT, reserva
+  workflow_dispatch:
+    inputs:
+      data:
+        description: "Dias específicos (dd-mm-aaaa, separados por vírgula). Vazio = ontem e hoje."
+        required: false
+        default: ""
+      para:
+        description: "Mandar o email só para este endereço (teste). Vazio = destinatários do secret."
+        required: false
+        default: ""
+
+concurrency:
+  group: dou-megaedu
+  cancel-in-progress: false
+
+jobs:
+  megaedu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run DOU MegaEdu
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          PLANILHA_MEGAEDU_DOU: ${{ secrets.PLANILHA_MEGAEDU_DOU }}
+          PLANILHA_MEGAEDU_ACHADOS: ${{ secrets.PLANILHA_MEGAEDU_ACHADOS }}
+          EMAIL: ${{ secrets.EMAIL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          DESTINATARIOS_MEGAEDU: ${{ github.event.inputs.para || secrets.DESTINATARIOS_MEGAEDU }}
+          DOU_DATE: ${{ github.event.inputs.data }}
+        run: |
+          python megaedu_dou.py

@@ -24,31 +24,15 @@ import os
 import re
 import sys
 import json
-import time
-import unicodedata
-from datetime import datetime, timedelta
 
-import requests
-from bs4 import BeautifulSoup
+from datetime import datetime
 
-try:
-    from zoneinfo import ZoneInfo
-except Exception:
-    from backports.zoneinfo import ZoneInfo
-
-TZ_BR = ZoneInfo("America/Sao_Paulo")
+import dou_comum as C
+from dou_comum import TZ_BR, norm as _norm, edicao as _edicao, texto_ato as _texto_ato
 
 SHEET_ID = os.getenv("PLANILHA_TRANSICAO", "").strip()
 ABA = "DOU federal"
 SECOES = ["DO1", "DO2", "DO1E", "DO2E"]
-
-HDR = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126 Safari/537.36"
-    ),
-}
 
 COLS = ["Data", "Seção", "Movimento", "Órgão", "Cargo", "Nome", "Trecho", "Ato", "Link"]
 
@@ -249,65 +233,6 @@ FORA_RX = re.compile(
     r"empresa de pesquisa energ[eé]tica",
     re.I,
 )
-
-
-def _norm(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
-    return re.sub(r"[^a-z0-9]+", " ", s).strip()
-
-
-def _sess():
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
-
-    s = requests.Session()
-    r = Retry(total=6, connect=6, read=6, backoff_factor=0.7,
-              status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",),
-              raise_on_status=False)
-    s.mount("https://", HTTPAdapter(max_retries=r))
-    return s
-
-
-HTTP = _sess()
-
-
-def _edicao(data: str, secao: str) -> list[dict]:
-    url = f"https://www.in.gov.br/leiturajornal?data={data}&secao={secao}"
-    for tentativa in range(3):
-        try:
-            r = HTTP.get(url, timeout=(10, 75), headers=HDR)
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-            params = soup.find("script", {"id": "params"})
-            raw = (params.get_text() if params else "").strip()
-            if not raw:
-                m = re.search(r'(\{"jsonArray"\s*:\s*\[.*?\]\s*\})', r.text, flags=re.S)
-                raw = m.group(1) if m else ""
-            if not raw:
-                return []
-            raw = raw[raw.find("{"): raw.rfind("}") + 1]
-            arr = json.loads(raw).get("jsonArray", []) or []
-            for it in arr:
-                it["secao"] = secao
-            return [it for it in arr if isinstance(it, dict)]
-        except Exception as e:
-            print(f"[{data} {secao}] tentativa {tentativa + 1}: {e}")
-            time.sleep(10 * (tentativa + 1))
-    raise RuntimeError(f"DOU {data} {secao} não respondeu")
-
-
-def _texto_ato(url: str) -> str:
-    try:
-        r = HTTP.get(url, timeout=(10, 75), headers=HDR)
-        r.raise_for_status()
-    except Exception as e:
-        print(f"falha ao baixar {url}: {e}")
-        return ""
-    soup = BeautifulSoup(r.text, "html.parser")
-    bloco = soup.select_one("article#materia div.texto-dou") or soup.select_one("div.texto-dou")
-    if not bloco:
-        return ""
-    return re.sub(r"[ \t]+", " ", bloco.get_text("\n", strip=True)).strip()
 
 
 def _candidato(it: dict) -> bool:
@@ -579,88 +504,18 @@ def varre(datas: list[str]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _chave(a: dict) -> tuple:
-    return (a["Link"], _norm(a["Cargo"]), _norm(a["Movimento"]), _norm(a["Nome"]))
+    return (a.get("Link", ""), _norm(a.get("Cargo")), _norm(a.get("Movimento")), _norm(a.get("Nome")))
 
 
-def _aba(sh):
-    import gspread
-    try:
-        return sh.worksheet(ABA)
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(ABA, rows=2, cols=len(COLS))
-        ws.update(range_name="A1", values=[COLS])
-        _formata(sh, ws)
-        return ws
-
-
-def _formata(sh, ws):
-    marinho = {"red": 0x19 / 255, "green": 0x2D / 255, "blue": 0x4E / 255}
-    gelo = {"red": 0xF4 / 255, "green": 0xF3 / 255, "blue": 0xEF / 255}
-    larguras = [90, 60, 100, 220, 300, 230, 520, 260, 120]
-    reqs = [
-        {"repeatCell": {
-            "range": {"sheetId": ws.id},
-            "cell": {"userEnteredFormat": {
-                "textFormat": {"fontFamily": "Montserrat", "fontSize": 10},
-                "verticalAlignment": "MIDDLE", "wrapStrategy": "WRAP",
-                "backgroundColor": gelo}},
-            "fields": "userEnteredFormat(textFormat,verticalAlignment,wrapStrategy,backgroundColor)"}},
-        {"repeatCell": {
-            "range": {"sheetId": ws.id, "startRowIndex": 0, "endRowIndex": 1},
-            "cell": {"userEnteredFormat": {
-                "backgroundColor": marinho,
-                "textFormat": {"fontFamily": "Montserrat", "fontSize": 10, "bold": True,
-                               "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
-                "verticalAlignment": "MIDDLE"}},
-            "fields": "userEnteredFormat(backgroundColor,textFormat,verticalAlignment)"}},
-        {"updateSheetProperties": {
-            "properties": {"sheetId": ws.id, "gridProperties": {"frozenRowCount": 1}},
-            "fields": "gridProperties.frozenRowCount"}},
-    ]
-    for i, px in enumerate(larguras):
-        reqs.append({"updateDimensionProperties": {
-            "range": {"sheetId": ws.id, "dimension": "COLUMNS", "startIndex": i, "endIndex": i + 1},
-            "properties": {"pixelSize": px}, "fields": "pixelSize"}})
-    sh.batch_update({"requests": reqs})
+LARGURAS = [90, 60, 100, 220, 300, 230, 520, 260, 120]
 
 
 def grava(achados: list[dict]) -> tuple[list[dict], str]:
-    import gspread
-    from google.oauth2.service_account import Credentials
-
-    if not SHEET_ID:
-        raise RuntimeError("Secret PLANILHA_TRANSICAO não definido.")
-    info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-    if "\\n" in info.get("private_key", ""):
-        info["private_key"] = info["private_key"].replace("\\n", "\n")
-    creds = Credentials.from_service_account_info(
-        info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
-    sh = gspread.authorize(creds).open_by_key(SHEET_ID)
-    ws = _aba(sh)
+    sh = C.abre_planilha(SHEET_ID, "PLANILHA_TRANSICAO")
+    ws = C.aba(sh, ABA, COLS, LARGURAS)
     url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid={ws.id}"
-
-    vals = ws.get_all_values()
-    idx = {c: i for i, c in enumerate(vals[0])} if vals else {}
-    existentes = set()
-    for r in vals[1:]:
-        g = lambda c: r[idx[c]] if c in idx and idx[c] < len(r) else ""
-        existentes.add((g("Link"), _norm(g("Cargo")), _norm(g("Movimento")), _norm(g("Nome"))))
-
-    novos = []
-    for a in achados:
-        k = _chave(a)
-        if k in existentes:
-            continue
-        existentes.add(k)
-        novos.append(a)
-    if not novos:
-        print("nada novo na planilha.")
-        return [], url
-
-    ws.insert_rows([[a[c] for c in COLS] for a in novos], row=2, value_input_option="RAW")
-    # Grade no tamanho dos dados: a aba nasce com uma linha vazia que desce a cada inserção.
-    ws.resize(rows=max(len(vals), 1) + len(novos))
-    print(f"+{len(novos)} linhas em {ABA}.")
+    novos = C.grava_novos(ws, COLS, achados, _chave)
+    print(f"+{len(novos)} linhas em {ABA}." if novos else "nada novo na planilha.")
     return novos, url
 
 
@@ -716,16 +571,8 @@ def envia(novos: list[dict], url: str) -> None:
     _send_email(f"DOU | Transição: {n} {'atos' if n > 1 else 'ato'}", _html(novos, url), dest)
 
 
-def _datas() -> list[str]:
-    fixa = os.getenv("DOU_DATE", "").strip()
-    if fixa:
-        return [d.strip() for d in fixa.split(",") if d.strip()]
-    hoje = datetime.now(TZ_BR).date()
-    return [(hoje - timedelta(days=1)).strftime("%d-%m-%Y"), hoje.strftime("%d-%m-%Y")]
-
-
 if __name__ == "__main__":
-    datas = _datas()
+    datas = C.datas_padrao()
     achados = varre(datas)
     print(f"{len(achados)} achados em {', '.join(datas)}")
     if "--seco" in sys.argv:
