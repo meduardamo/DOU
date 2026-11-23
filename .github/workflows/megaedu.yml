@@ -5,12 +5,13 @@ name: DOU MegaEdu
 # encontrados" e para o email. Cada rodada lê ontem e hoje (a extra sai à
 # noite); o dedup é pela planilha, então rodar de novo não repete email.
 #
-# Disparo principal: cron-job.org, 06:30 (America/Recife), POST em
-# /repos/meduardamo/DOU/dispatches com {"event_type": "raspar-dou-megaedu"}.
-# O cron abaixo é só reserva: o agendado do GitHub atrasa de 1h a 4h.
+# Disparo principal: o mesmo job do cron-job.org que chama o DOU Regular às
+# 05:40 ({"event_type": "raspar-dou"}) dispara este workflow junto, sem job
+# novo. "raspar-dou-megaedu" serve para um disparo só da MegaEdu. O cron
+# abaixo é só reserva: o agendado do GitHub atrasa de 1h a 4h.
 on:
   repository_dispatch:
-    types: [raspar-dou-megaedu]
+    types: [raspar-dou, raspar-dou-megaedu]
   schedule:
     - cron: "0 10 * * 1-5" # 07:00 BRT, reserva
   workflow_dispatch:
