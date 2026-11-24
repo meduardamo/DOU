@@ -400,20 +400,23 @@ def _precisa_baixar(it: dict, regras: list[Regra]) -> list[Regra]:
 def varre(datas: list[str], regras: list[Regra]) -> list[dict]:
     fila = []
     vistos = set()
-    for data in datas:
-        for sec in SECOES:
-            itens = C.edicao(data, sec)
-            n = 0
-            for it in itens:
-                lk = C.link(it)
-                if lk in vistos:
-                    continue
-                cand = _precisa_baixar(it, regras)
-                if cand:
-                    vistos.add(lk)
-                    fila.append((it, cand))
-                    n += 1
-            print(f"[{data} {sec}] {len(itens)} itens, {n} a baixar")
+    pares = [(d, s) for d in datas for s in SECOES]
+    lidas, _faltou = C.edicoes(pares)
+    for data, sec in pares:
+        if (data, sec) not in lidas:
+            continue
+        itens = lidas[(data, sec)]
+        n = 0
+        for it in itens:
+            lk = C.link(it)
+            if lk in vistos:
+                continue
+            cand = _precisa_baixar(it, regras)
+            if cand:
+                vistos.add(lk)
+                fila.append((it, cand))
+                n += 1
+        print(f"[{data} {sec}] {len(itens)} itens, {n} a baixar")
 
     with ThreadPoolExecutor(max_workers=4) as ex:
         textos = list(ex.map(lambda x: C.texto_ato(C.link(x[0]), por_paragrafo=True), fila))

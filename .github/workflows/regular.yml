@@ -77,6 +77,7 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           DOU_DATE: ${{ github.event.inputs.data }}  # backfill dd-mm-aaaa; vazio = hoje
           DOU_EMAIL_PENDENTE: email_pendente.json  # email sai no último passo, depois do alinhamento
+          DOU_ESPERA_MIN: "180"  # seção fora do ar (502): nova tentativa a cada 10 min por até 3h
         run: |
           python dou_unificado.py regular
 

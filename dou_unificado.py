@@ -589,43 +589,21 @@ def _baixar_conteudo_pagina(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _raspa_secoes(data: str, secoes: list[str], campo_secao: str = "secao") -> dict | None:
+    # Leitura pelo dou_comum.edicoes: seção fora do ar (502) não derruba a
+    # rodada e, com DOU_ESPERA_MIN (regular.yml), é tentada de novo a cada
+    # 10 min antes de seguir para o alinhamento e o email.
+    from dou_comum import edicoes
+
+    lidas, faltou = edicoes([(data, s) for s in secoes])
     combined: dict[str, list] = {"jsonArray": []}
-
     for sec in secoes:
-        for attempt in range(3):
-            try:
-                url = f"https://www.in.gov.br/leiturajornal?data={data}&secao={sec}"
-                page = requests.get(url, timeout=60, headers=_HDR, allow_redirects=True)
-                page.raise_for_status()
-                soup = BeautifulSoup(page.text, "html.parser")
-
-                params = soup.find("script", {"id": "params"})
-                raw_json = params.text.strip() if (params and params.text) else None
-
-                if not raw_json:
-                    m = re.search(r'(\{"jsonArray"\s*:\s*\[.*?\]\s*\})', page.text, flags=re.S)
-                    raw_json = m.group(1).strip() if m else None
-
-                if not raw_json:
-                    print(f"[{sec}] payload não encontrado. status={page.status_code}")
-                    break
-
-                j = json.loads(raw_json)
-                arr = j.get("jsonArray", []) or []
-                for it in arr:
-                    if isinstance(it, dict):
-                        it[campo_secao] = sec
-                combined["jsonArray"].extend(arr)
-                print(f"[{sec}] itens: {len(arr)}")
-                break  # sucesso
-
-            except Exception as e:
-                if attempt < 2:
-                    wait = 15 * (attempt + 1)
-                    print(f"[{sec}] tentativa {attempt + 1} falhou: {e}. Aguardando {wait}s...")
-                    time.sleep(wait)
-                else:
-                    print(f"[{sec}] falhou após 3 tentativas: {e}")
+        arr = lidas.get((data, sec))
+        if arr is None:
+            continue
+        for it in arr:
+            it[campo_secao] = sec
+        combined["jsonArray"].extend(arr)
+        print(f"[{sec}] itens: {len(arr)}")
 
     if combined["jsonArray"]:
         print(f"Total coletado: {len(combined['jsonArray'])} itens")

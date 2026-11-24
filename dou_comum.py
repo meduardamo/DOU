@@ -57,8 +57,9 @@ def link(it: dict) -> str:
     return URL_ATO + (it.get("urlTitle") or "")
 
 
-def edicao(data: str, secao: str) -> list[dict]:
-    """Itens de uma seção (DO1, DO2E...) num dia dd-mm-aaaa, com o campo "secao"."""
+def edicao(data: str, secao: str) -> list[dict] | None:
+    """Itens de uma seção (DO1, DO2E...) num dia dd-mm-aaaa, com o campo "secao".
+    None se o site não responder (502 etc.) depois das tentativas."""
     url = f"https://www.in.gov.br/leiturajornal?data={data}&secao={secao}"
     for tentativa in range(3):
         try:
@@ -80,7 +81,38 @@ def edicao(data: str, secao: str) -> list[dict]:
         except Exception as e:
             print(f"[{data} {secao}] tentativa {tentativa + 1}: {e}")
             time.sleep(10 * (tentativa + 1))
-    raise RuntimeError(f"DOU {data} {secao} não respondeu")
+    print(f"[{data} {secao}] não respondeu")
+    return None
+
+
+def edicoes(pares: list[tuple[str, str]], espera_min: float | None = None
+            ) -> tuple[dict[tuple[str, str], list[dict]], list[tuple[str, str]]]:
+    """Lê várias seções (data, secao). Uma seção fora do ar não derruba a rodada:
+    as que responderam seguem, e as que não responderam são tentadas de novo a
+    cada 10 min até espera_min (env DOU_ESPERA_MIN, padrão 0 = sem espera).
+    Em 24/11/2026 o in.gov.br deu 502 ao GitHub das 5h40 às ~8h50.
+    Devolve ({(data, secao): itens}, [(data, secao) que ficaram faltando])."""
+    if espera_min is None:
+        espera_min = float(os.getenv("DOU_ESPERA_MIN") or 0)
+    lidas: dict[tuple[str, str], list[dict]] = {}
+    faltam = list(pares)
+    limite = time.monotonic() + espera_min * 60
+    while True:
+        for p in list(faltam):
+            itens = edicao(*p)
+            if itens is not None:
+                lidas[p] = itens
+                faltam.remove(p)
+        resta = limite - time.monotonic()
+        if not faltam or resta <= 0:
+            break
+        pausa = min(600, resta)
+        print(f"DOU fora do ar em {', '.join(f'{d} {s}' for d, s in faltam)}; "
+              f"nova tentativa em {pausa / 60:.0f} min.")
+        time.sleep(pausa)
+    for d, s in faltam:
+        print(f"::warning::DOU {d} {s} não respondeu; fica para a próxima rodada.")
+    return lidas, faltam
 
 
 def texto_ato(url: str, por_paragrafo: bool = False) -> str:

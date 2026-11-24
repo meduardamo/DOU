@@ -28,7 +28,7 @@ import json
 from datetime import datetime
 
 import dou_comum as C
-from dou_comum import TZ_BR, norm as _norm, edicao as _edicao, texto_ato as _texto_ato
+from dou_comum import TZ_BR, norm as _norm, edicoes as _edicoes, texto_ato as _texto_ato
 
 SHEET_ID = os.getenv("PLANILHA_TRANSICAO", "").strip()
 ABA = "DOU federal"
@@ -478,24 +478,27 @@ def extrai_conanda(it: dict, texto: str) -> list[dict]:
 
 def varre(datas: list[str]) -> list[dict]:
     achados, vistos = [], set()
-    for data in datas:
-        for sec in SECOES:
-            itens = _edicao(data, sec)
-            cand = [(it, _candidato(it), _candidato_desenho(it), _candidato_conanda(it)) for it in itens]
-            cand = [c for c in cand if any(c[1:])]
-            print(f"[{data} {sec}] {len(itens)} itens, {len(cand)} baixados")
-            for it, pessoal, desenho, conanda in cand:
-                link = "https://www.in.gov.br/en/web/dou/-/" + (it.get("urlTitle") or "")
-                if link in vistos:
-                    continue
-                vistos.add(link)
-                texto = _texto_ato(link)
-                if pessoal:
-                    achados.extend(extrai(it, texto))
-                if desenho:
-                    achados.extend(extrai_desenho(it, texto))
-                if conanda:
-                    achados.extend(extrai_conanda(it, texto))
+    pares = [(d, s) for d in datas for s in SECOES]
+    lidas, _faltou = _edicoes(pares)
+    for data, sec in pares:
+        if (data, sec) not in lidas:
+            continue
+        itens = lidas[(data, sec)]
+        cand = [(it, _candidato(it), _candidato_desenho(it), _candidato_conanda(it)) for it in itens]
+        cand = [c for c in cand if any(c[1:])]
+        print(f"[{data} {sec}] {len(itens)} itens, {len(cand)} baixados")
+        for it, pessoal, desenho, conanda in cand:
+            link = "https://www.in.gov.br/en/web/dou/-/" + (it.get("urlTitle") or "")
+            if link in vistos:
+                continue
+            vistos.add(link)
+            texto = _texto_ato(link)
+            if pessoal:
+                achados.extend(extrai(it, texto))
+            if desenho:
+                achados.extend(extrai_desenho(it, texto))
+            if conanda:
+                achados.extend(extrai_conanda(it, texto))
     return achados
 
 

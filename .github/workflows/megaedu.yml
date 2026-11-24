@@ -55,5 +55,6 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           DESTINATARIOS_MEGAEDU: ${{ github.event.inputs.para || secrets.DESTINATARIOS_MEGAEDU }}
           DOU_DATE: ${{ github.event.inputs.data }}
+          DOU_ESPERA_MIN: "180"  # seção fora do ar (502): nova tentativa a cada 10 min por até 3h
         run: |
           python megaedu_dou.py
