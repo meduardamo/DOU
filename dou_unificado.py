@@ -588,13 +588,18 @@ def _baixar_conteudo_pagina(url: str) -> str:
 # Raspagem — edição regular e extra
 # ---------------------------------------------------------------------------
 
+_SECOES_FALTANDO: list[str] = []  # seções que não abriram na última leitura
+
+
 def _raspa_secoes(data: str, secoes: list[str], campo_secao: str = "secao") -> dict | None:
     # Leitura pelo dou_comum.edicoes: seção fora do ar (502) não derruba a
     # rodada e, com DOU_ESPERA_MIN (regular.yml), é tentada de novo a cada
     # 10 min antes de seguir para o alinhamento e o email.
     from dou_comum import edicoes
 
+    global _SECOES_FALTANDO
     lidas, faltou = edicoes([(data, s) for s in secoes])
+    _SECOES_FALTANDO = [s for _d, s in faltou]
     combined: dict[str, list] = {"jsonArray": []}
     for sec in secoes:
         arr = lidas.get((data, sec))
@@ -1771,8 +1776,28 @@ def envia_emails_edicao(
 # Entrypoints
 # ---------------------------------------------------------------------------
 
+def avisa_secoes_faltando(data: str, secoes: list[str]) -> None:
+    """Email curto à equipe quando o site não abriu alguma seção nem depois da
+    espera (DOU_ESPERA_MIN): sem ele, a edição incompleta passaria calada."""
+    import email_layout as L
+    if not secoes or os.getenv("DOU_SEM_EMAIL", "").strip().lower() in ("1", "true", "sim"):
+        return
+    dia = data.replace("-", "/")
+    lista = ", ".join(secoes)
+    agora = now_br()
+    hora = f"{agora.hour}h{agora:%M}"
+    texto = (f"O site do Diário Oficial não abriu {'as seções' if len(secoes) > 1 else 'a seção'} "
+             f"{L.esc(lista)} de {dia} até as {hora}. O email de hoje sai sem "
+             f"{'elas' if len(secoes) > 1 else 'ela'}. A equipe de Dados roda de novo quando o site voltar.")
+    html = L.pagina("DOU Regular", "Edição incompleta", dia, L.nota(texto),
+                    previa=f"{lista} não abriu")
+    _send_email(f"DOU Regular - {data} | {lista} não abriu", html,
+                _pick_recipients("DESTINATARIOS_CLIENTES"))
+
+
 def executar_regular(data: str | None = None):
     conteudo = raspa_dou(data=data)
+    avisa_secoes_faltando(data or now_br().strftime("%d-%m-%Y"), _SECOES_FALTANDO)
 
     geral = procura_termos(conteudo)
     _qtd_g, ins_g, _sh, ws_geral = salva_na_base(geral)
