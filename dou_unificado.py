@@ -1787,8 +1787,7 @@ def avisa_secoes_faltando(data: str, secoes: list[str]) -> None:
     agora = now_br()
     hora = f"{agora.hour}h{agora:%M}"
     texto = (f"O site do Diário Oficial não abriu {'as seções' if len(secoes) > 1 else 'a seção'} "
-             f"{L.esc(lista)} de {dia} até as {hora}. O email de hoje sai sem "
-             f"{'elas' if len(secoes) > 1 else 'ela'}. A equipe de Dados roda de novo quando o site voltar.")
+             f"{L.esc(lista)} de {dia} até as {hora}. A equipe de Dados roda de novo quando o site voltar.")
     html = L.pagina("DOU Regular", "Edição incompleta", dia, L.nota(texto),
                     previa=f"{lista} não abriu")
     _send_email(f"DOU Regular - {data} | {lista} não abriu", html,
