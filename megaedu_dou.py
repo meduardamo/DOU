@@ -397,11 +397,15 @@ def _precisa_baixar(it: dict, regras: list[Regra]) -> list[Regra]:
     return candidatas
 
 
+FALTOU: list[tuple[str, str]] = []  # (data, seção) que o site não abriu na rodada
+
+
 def varre(datas: list[str], regras: list[Regra]) -> list[dict]:
     fila = []
     vistos = set()
     pares = [(d, s) for d in datas for s in SECOES]
-    lidas, _faltou = C.edicoes(pares)
+    global FALTOU
+    lidas, FALTOU = C.edicoes(pares)
     for data, sec in pares:
         if (data, sec) not in lidas:
             continue
@@ -512,6 +516,30 @@ def envia(novos: list[dict], url: str, avisos: list[str]) -> None:
     _send_email(f"DOU | MegaEdu: {n} {'atos' if n > 1 else 'ato'}", _html(novos, url, avisos), dest)
 
 
+def avisa_secoes_faltando(faltou: list[tuple[str, str]]) -> None:
+    """Email curto só para a equipe da Eixo (endereços @eixogov.com de
+    DESTINATARIOS_MEGAEDU) quando o site não abriu alguma seção nem depois da
+    espera. O cliente não recebe."""
+    from dou_unificado import _pick_recipients, _send_email
+    import email_layout as L
+
+    dest = [e for e in _pick_recipients("DESTINATARIOS_MEGAEDU", env_fallback="DESTINATARIOS_MEGAEDU")
+            if e.lower().endswith("@eixogov.com")]
+    if not faltou or not dest:
+        return
+    partes = [f"{sec} de {data.replace('-', '/')}" for data, sec in faltou]
+    lista = partes[0] if len(partes) == 1 else ", ".join(partes[:-1]) + " e " + partes[-1]
+    agora = datetime.now(C.TZ_BR)
+    texto = (f"O site do Diário Oficial não abriu {'as seções' if len(partes) > 1 else 'a seção'} "
+             f"{L.esc(lista)} até as {agora.hour}h{agora:%M}. A equipe de Dados roda de novo "
+             f"quando o site voltar.")
+    secs = ", ".join(dict.fromkeys(sec for _d, sec in faltou))
+    hoje = agora.strftime("%d-%m-%Y")
+    html = L.pagina("DOU MegaEdu", "Edição incompleta", hoje.replace("-", "/"), L.nota(texto),
+                    previa=f"{secs} não abriu")
+    _send_email(f"DOU MegaEdu - {hoje} | {secs} não abriu", html, dest)
+
+
 # ---------------------------------------------------------------------------
 
 def _chave(a: dict) -> tuple:
@@ -550,6 +578,7 @@ def main():
     print(f"+{len(novos)} linhas em {ABA_ACHADOS}." if novos else "nada novo na planilha.")
     if novos:
         envia(novos, url, avisos)
+    avisa_secoes_faltando(FALTOU)
 
 
 if __name__ == "__main__":
